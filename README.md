@@ -106,7 +106,10 @@ other plugin configuration page.
 
 ## Screenshots
 
-To be added: main dashboard view and the settings page.
+<img width="1433" height="1134" alt="cockpit view" src="https://github.com/user-attachments/assets/33e9a364-99a0-4deb-88b8-9554375204a2" />
+<img width="887" height="198" alt="navigation" src="https://github.com/user-attachments/assets/9d4589c5-088c-4418-970b-686ae957b4d0" />
+<img width="1424" height="1119" alt="setting" src="https://github.com/user-attachments/assets/2760a819-3797-4345-a019-1c78f0808688" />
+
 
 ## Compatibility
 
