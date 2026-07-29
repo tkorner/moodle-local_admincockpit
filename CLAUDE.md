@@ -1,142 +1,145 @@
 # CLAUDE.md – local_admincockpit
 
-Kontext-Datei für Claude Code Sessions in diesem Projekt. Vor Arbeitsbeginn lesen.
+Context file for Claude Code sessions in this project. Read before starting work.
 
 ---
 
-## Projektüberblick
+## Project overview
 
-Moodle-Plugin `local_admincockpit`: Navigations- und Kennzahlen-Dashboard für Administratoren. Zeigt Nutzer-/Kurs-Kennzahlen pro "Schule" (Kohorte + Top-Level-Kategorie, verknüpft über `idnumber`), Health-Signale mit Call-to-Action sowie Direktlinks zu häufig genutzten Verwaltungsseiten.
+Moodle plugin `local_admincockpit`: navigation and metrics dashboard for administrators. Shows user/course metrics per "school" (cohort + top-level category, linked via `idnumber`), health signals with a call-to-action, and direct links to frequently used admin pages.
 
-**Quelle der Wahrheit für Anforderungen:** `SPEC-admincockpit.md` im selben Verzeichnis. Bei Widersprüchen zwischen dieser Datei und der Spec gilt die Spec – hier nachfragen statt selbst zu entscheiden.
+**Source of truth for requirements:** `SPEC-admincockpit.md` in the same directory. If this file and the spec disagree, the spec wins – ask, don't decide unilaterally.
 
-**Umsetzungssequenz:** `claude-code-prompt-admincockpit.md` im selben Verzeichnis. Enthält die Schritte, die **einzeln nacheinander** abgearbeitet werden – nicht mehrere Schritte auf einmal umsetzen, auch wenn der Kontext das hergeben würde. Nach jedem Schritt wird das Ergebnis reviewt, bevor der nächste beginnt. Die Liste ist im Verlauf gewachsen (Zwischenschritte wie 0b, 7b–7h kamen dazu) – die "Fortschritt"-Zeile weiter unten und die Datei selbst sind die Quelle der Wahrheit für den aktuellen Stand, nicht eine fixe Schrittanzahl.
+**Implementation sequence:** `claude-code-prompt-admincockpit.md` in the same directory. Contains the steps, to be worked through **one at a time** – don't implement several steps at once even if the context would allow it. Each step's result is reviewed before the next one starts. The list has grown over time (intermediate steps like 0b, 7b–7h, 13 were added) – the "Progress" line further down and the file itself are the source of truth for the current state, not a fixed step count.
 
 ---
 
-## Zielumgebung
+## Target environment
 
-- **Moodle-Version:** 5.2.x
-- **Lokaler Plugin-Ordner:** `/Users/tkorner/Documents/claude/plugins/local/admincockpit/`
-- **Docker-Mount-Ziel:** `/var/www/html/public/local/admincockpit/` (Moodle 5.x `public/`-Verzeichnisstruktur - verifiziert via `docker inspect claude-moodle-1`, nicht die ältere flache `/var/www/html/local/`-Struktur)
-- **Docker-Compose-Mount:** `./plugins/local:/var/www/html/public/local`
-- **Container:** `claude-moodle-1` (Image `erseco/alpine-moodle`), DB in `claude-mariadb-1`
-- **PHP/DB:** Standard-Alpine-Moodle-Setup, keine Sonderkonfiguration bekannt
+- **Moodle version:** 5.2.x
+- **Local plugin folder:** `/Users/tkorner/Documents/claude/plugins/local/admincockpit/`
+- **Docker mount target:** `/var/www/html/public/local/admincockpit/` (Moodle 5.x `public/` directory layout - verified via `docker inspect claude-moodle-1`, not the older flat `/var/www/html/local/` layout)
+- **Docker Compose mount:** `./plugins/local:/var/www/html/public/local`
+- **Container:** `claude-moodle-1` (image `erseco/alpine-moodle`), DB in `claude-mariadb-1`
+- **PHP/DB:** standard Alpine Moodle setup, no special configuration known
 
 ---
 
 ## Git
 
-- **Repo:** `tkorner/moodle-local_admincockpit` (privat)
-- Repo-Root = Plugin-Root (also `version.php` direkt im Repo-Root, kein `local/admincockpit/`-Unterordner im Git-Repo selbst – Moodle-Konvention für Einzelplugin-Repos)
-- Nach jedem abgeschlossenen und reviewten Schritt aus dem Prompt-Dokument committen, damit einzelne Schritte bei Bedarf zurückgerollt werden können
+- **Repo:** `tkorner/moodle-local_admincockpit` (private)
+- Repo root = plugin root (i.e. `version.php` sits directly in the repo root, no `local/admincockpit/` subfolder inside the git repo itself – Moodle convention for single-plugin repos)
+- Commit after each completed and reviewed step from the prompt document, so individual steps can be rolled back if needed
+- **Commit messages, release notes, PR descriptions: always in English**, regardless of the language the session itself is conducted in - this is a public GitHub repo (see "Marketplace-Submission" below)
 
 ---
 
-## Architektur-Grundprinzipien (aus der Spec)
+## Core architectural principles (from the spec)
 
-- **Kein eigenes DB-Schema.** Alle Kennzahlen werden zur Laufzeit berechnet (`timecreated`-Filter statt Snapshot-Historie). Falls im Verlauf der Eindruck entsteht, dass doch eine Tabelle nötig wäre – anhalten und nachfragen, das widerspricht einer bewussten Scope-Entscheidung.
-- **Kohorte↔Kategorie-Matching ausschliesslich über `idnumber`**, nicht über Anzeigenamen.
-- **Business-Logik strikt getrennt von Ausgabe:** Metrik-Klassen (`classes/metrics/...`) kennen keine Seiten/Blöcke. Grund: eine spätere Umwandlung von "eigene Seite" zu "Block" ist offen (aktuell startet die Umsetzung bewusst mit einer Seite, nicht einem Block) und soll die Berechnungslogik unverändert lassen können.
-- **Health-Signale sind immer Zahl + Klick-Ziel**, nie reine Statistik ohne Handlungsmöglichkeit.
-
----
-
-## Zwingende Recherche-Punkte (nicht raten)
-
-Folgende Dinge dürfen nicht aus Trainingsdaten/Vermutung implementiert werden, sondern müssen im tatsächlichen Moodle-Core-Code bzw. der installierten Instanz verifiziert werden. Alle vier waren bei Implementierungsstart offen; Stand Schritt 12 sind alle verifiziert und im Code referenziert (siehe README "Reused core APIs" für Details):
-
-- ✅ Core-Klasse/-Methode hinter dem Security-Overview-Report (`admin/report/security/`) – wiederverwendet: `\core\check\manager::get_checks('security')` (`classes/metrics/health_signals.php`)
-- ✅ Core-Tabelle/-Klasse für Task-Log/Cron-Status – `get_config('tool_task', 'lastcronstart')` + `task_log.result` (`classes/metrics/health_signals.php`)
-- ✅ Exakte URL/Parameter für die Scheduled-Tasks-Übersicht – `/admin/tool/task/scheduledtasks.php` (`classes/navitems_parser.php`)
-- ✅ Exakte Section-URL der `theme_boost_union`-Einstellungen – `/theme/boost_union/settings_overview.php` (`classes/navitems_parser.php`)
-- Bei Unsicherheit über zukünftige, noch unverifizierte Punkte: explizit nachfragen statt einer plausibel klingenden, aber ungeprüften Annahme
+- **No own DB schema.** All metrics are computed at request time (`timecreated` filtering instead of a snapshot history). If it ever looks like a table would actually be needed – stop and ask, that would contradict a deliberate scope decision.
+- **Cohort↔category matching exclusively via `idnumber`**, never via display names.
+- **Business logic strictly separated from output:** metric classes (`classes/metrics/...`) know nothing about pages/blocks. Reason: a later conversion from "own page" to "block" is left open (the implementation deliberately starts as a page, not a block) and should be able to leave the calculation logic untouched.
+- **Health signals are always number + click-target**, never a plain statistic without an action.
 
 ---
 
-## Testing-Strategie
+## Mandatory research points (don't guess)
 
-Kein lokales GUI. Drei Ebenen (Stand Code-Review 2026-07-16 – entgegen der langjährigen Annahme in diesem Dokument ist PHPUnit auf der laufenden Docker-Instanz tatsächlich installiert und lauffähig, siehe Punkt 2):
+The following things must not be implemented from training data/assumption, but must be verified against the actual Moodle core code or the installed instance. All four were open at the start of implementation; as of step 12 all are verified and referenced in the code (see README "Reused core APIs" for details):
 
-1. **CLI-Smoke-Skripte** (`cli/verify_*.php`) – sofortiges Feedback während der Session, direkt gegen die echten Daten der laufenden Docker-Instanz, ohne Testframework:
+- ✅ Core class/method behind the security overview report (`admin/report/security/`) – reused: `\core\check\manager::get_checks('security')` (`classes/metrics/health_signals.php`)
+- ✅ Core table/class for task log/cron status – `get_config('tool_task', 'lastcronstart')` + `task_log.result` (`classes/metrics/health_signals.php`)
+- ✅ Exact URL/parameters for the scheduled tasks overview – `/admin/tool/task/scheduledtasks.php` (`classes/navitems_parser.php`)
+- ✅ Exact section URL of the `theme_boost_union` settings – `/theme/boost_union/settings_overview.php` (`classes/navitems_parser.php`)
+- If unsure about future, not-yet-verified points: ask explicitly instead of implementing a plausible-sounding but unverified assumption
+
+---
+
+## Testing strategy
+
+No local GUI. Three levels (as of the 2026-07-16 code review – contrary to the long-standing assumption in this document, PHPUnit is actually installed and runnable on the running Docker instance, see point 2):
+
+1. **CLI smoke scripts** (`cli/verify_*.php`) – immediate feedback during the session, run directly against the real data of the running Docker instance, no test framework:
    ```bash
    docker exec -it claude-moodle-1 php /var/www/html/public/local/admincockpit/cli/verify_school_matcher.php
    ```
-   Kein Ersatz für echte Tests, nur Sichtprüfung während der Entwicklung.
+   Not a substitute for real tests, just a visual check during development.
 
-2. **PHPUnit direkt im Container** – lauffähig, `vendor/bin/phpunit` existiert:
+2. **PHPUnit directly in the container** – runnable, `vendor/bin/phpunit` exists (as a Composer dev dependency; if it was removed by a container rebuild, `composer install` in the container brings it back, see 2026-07-29 note below):
    ```bash
    docker exec -it claude-moodle-1 sh -c "cd /var/www/html && vendor/bin/phpunit --configuration phpunit.xml --testsuite local_admincockpit_testsuite"
    ```
-   Sofortiges, vollständiges Testfeedback ohne auf CI zu warten – neue `*_test.php`-Dateien unter `tests/` werden automatisch erkannt (die registrierte Testsuite scannt per Datei-Suffix), kein `--buildconfig` nötig; nur bei einer komplett neuen Testsuite/Plugin-Komponente wäre das erforderlich. Nach jeder Änderung an `version.php` (z.B. Versionsbump) meldet PHPUnit "was initialised for different version" und muss einmalig neu initialisiert werden:
+   Immediate, complete test feedback without waiting for CI – new `*_test.php` files under `tests/` are picked up automatically (the registered test suite scans by file suffix), no `--buildconfig` needed; that would only be required for a brand-new test suite/plugin component. After every change to `version.php` (e.g. a version bump), PHPUnit reports "was initialised for different version" and needs a one-off re-init:
 
    ```bash
    docker exec -it claude-moodle-1 sh -c "cd /var/www/html && php public/admin/tool/phpunit/cli/init.php"
    ```
 
-3. **GitHub Actions mit `moodlehq/moodle-plugin-ci`** – zusätzliche Absicherung bei jedem Push/PR (unabhängige Umgebung/Matrix: PHP 8.3/8.4 × Moodle 5.1/5.2 × MariaDB/PostgreSQL, seit der Marketplace-Vorbereitung 2026-07-22 auch PostgreSQL, nicht mehr nur MariaDB): PHPUnit, Behat, phpcs (moodle-Ruleset), phplint, mustache-Lint etc. Ergebnis im GitHub-Actions-Tab prüfen, auch wenn Punkt 2 bereits lokal grün war – andere PHP-/Moodle-Versionen und DB-Engine können abweichen.
+   **2026-07-29 note:** on that date `vendor/bin/phpunit` was missing (phpunit/phpunit dev dependency not installed, despite this doc saying it's runnable) - fixed with `docker exec claude-moodle-1 sh -c "cd /var/www/html && composer install"`, then the re-init above. Unclear yet whether this was a one-off (e.g. after a container rebuild) or will recur - check first before assuming it's needed again.
 
-**Fortschritt:** Schritt 0 bis 12 sind umgesetzt und released (siehe Release 1.0.0/1.1.0-Commits); der Code-Review-Nacharbeitungs-Durchgang (2026-07-16) ist abgeschlossen und released (1.1.1). Seit 2026-07-22 läuft die Marketplace-Submission-Vorbereitung, siehe neuer Abschnitt "Marketplace-Submission" unten.
+3. **GitHub Actions with `moodlehq/moodle-plugin-ci`** – additional safety net on every push/PR (independent environment/matrix: PHP 8.3/8.4 × Moodle 5.1/5.2 × MariaDB/PostgreSQL, PostgreSQL added since the 2026-07-22 marketplace-submission prep, not just MariaDB anymore): PHPUnit, Behat, phpcs (moodle ruleset), phplint, mustache lint etc. Check the result in the GitHub Actions tab even if point 2 was already green locally – other PHP/Moodle versions and the DB engine can differ.
 
----
-
-## Coding-Standards
-
-- Moodle Coding Guidelines / Moodle Coding Style (phpcs mit moodle-Ruleset, falls lokal verfügbar)
-- Core-contribution-taugliche Qualität von Anfang an, auch wenn dies (anders als `qbank_cffpoc`) nicht für einen Core-Merge vorgesehen ist
-- Moodle Data Manipulation API für alle DB-Zugriffe (kein rohes mysqli, keine ungefilterten String-Konkatenationen in SQL)
-- PHPUnit-Tests für alle Metrik-/Matching-Klassen (siehe Prompt-Dokument, Schritt 1, 3, 4)
-- Sprachdateien: `lang/en/` und `lang/de/` parallel pflegen, keine hartcodierten Strings im Code
+**Progress:** Steps 0 through 12 are implemented and released (see release 1.0.0/1.1.0/1.1.1/2.0.0 commits); the code-review follow-up pass (2026-07-16) is complete and released (1.1.1). Marketplace-submission prep has been running since 2026-07-22, see the "Marketplace-Submission" section below. Step 13 (fix: "active" metrics follow the selected time range instead of a fixed 4 weeks, both globally and per school) is implemented and released as 2.1.0/2.1.1 (2026-07-29).
 
 ---
 
-## Bekannte offene Annahmen (aus SPEC Abschnitt 8)
+## Coding standards
 
-Stand Schritt 12:
-
-1. Kurszahl pro Schule inkl. Subkategorien – Annahme "ja", im Code explizit kommentiert (`classes/metrics/school_metrics.php`), bewusst revidierbar, nicht "offen" im Sinne von unentschieden
-2. Security-Overview-Aggregation – ✅ identifiziert, siehe Recherche-Punkte oben
-3. Scheduled-Tasks-URL – ✅ verifiziert, siehe Recherche-Punkte oben
-4. Boost-Union-Settings-URL – ✅ verifiziert, siehe Recherche-Punkte oben
-
-Weitere im Verlauf dokumentierte (nicht mehr offene, aber bewusste) Entscheidungen stehen in README.md unter "Known open assumptions", u.a. zur Interpretation der SPEC-Navigationspunkte und zur fehlenden Capability-Einschränkung der Default-Navigationslinks (Schritt 7h).
-
-Diese Liste bei Bedarf ergänzen, wenn im Verlauf der Implementierung neue offene Punkte auftauchen – nicht stillschweigend Annahmen treffen und weitermachen.
+- Moodle Coding Guidelines / Moodle Coding Style (phpcs with the moodle ruleset, if available locally)
+- Core-contribution-grade quality from the start, even though (unlike `qbank_cffpoc`) this isn't intended for a core merge
+- Moodle Data Manipulation API for all DB access (no raw mysqli, no unfiltered string concatenation in SQL)
+- PHPUnit tests for all metric/matching classes (see prompt document, steps 1, 3, 4)
+- Language files: maintain `lang/en/` and `lang/de/` in parallel, no hardcoded strings in the code
 
 ---
 
-## Marketplace-Submission
+## Known open assumptions (from SPEC section 8)
 
-Checkliste liegt ausserhalb dieses Repos (`Marketplace.md` im Claude-Projektverzeichnis, nicht im Plugin-Repo selbst). Stand 2026-07-22:
+As of step 12:
 
-- **Compliance-Audit durchgeführt:** Lizenz-Header (alle `.php`), GPLv3-`LICENSE`, Privacy-Provider (`null_provider`, da kein eigenes DB-Schema, siehe oben), keine Treffer für `eval()`/`unserialize()`/rohes `$_REQUEST`/`$_GET`/`$_POST`, keine rohe SQL-Konkatenation (`$DB->...` mit Platzhaltern durchgängig), Settings ausschliesslich über `get_config('local_admincockpit', ...)`/`config_plugins`, kein `composer.json` nötig, öffentlicher GitHub-Issue-Tracker vorhanden (Repo `tkorner/moodle-local_admincockpit`, öffentlich, Issues aktiviert) – alles ✅, keine Fixes nötig.
-- **CI-Matrix erweitert:** vorher nur MariaDB, jetzt zusätzlich PostgreSQL (Guideline verlangt beide Cross-DB-Engines) – siehe `.github/workflows/ci.yml`.
-- **Reifegrad angehoben:** `version.php` von `MATURITY_RC`/`1.1.1` auf `MATURITY_STABLE`/`1.2.0` für die Submission.
-- **Bewusste Abweichung dokumentiert:** `lang/de/` wird schon vor offizieller AMOS-Freigabe mitgeliefert – siehe README.md "Known open assumptions", letzter Punkt.
-- **Nicht automatisiert (bewusst, siehe Rückfrage 2026-07-22):** Screenshots (Dashboard + Settings) macht der Nutzer selbst per Browser-Login; das tatsächliche Release-Zip auf einer frischen Instanz testen (Checklisten-Punkt 8 – der `admin_externalpage_setup()`-Fehlerklasse) bleibt ebenfalls manuelle Aufgabe vor dem nächsten Tag.
-- **Git-Tag + GitHub-Release + tatsächliche Einreichung bei marketplace.moodle.com:** explizit erst nach erneuter Rücksprache, nicht automatisch am Ende dieser Session.
-- **Frankenstyle-Rename (2026-07-23):** `local_admindashboard` war bereits von zwei fremden GitHub-Repos belegt (`UzainAliSiddiqui/moodle-local_admindashboard`, eingebettetes Plugin in `Integer-Training/integermoodle1`) und damit für die Marketplace-Einreichung nicht nutzbar. Neuer, kollisionsfrei geprüfter Name: `local_admincockpit`, sichtbarer Produktname konsistent auf "Admin Cockpit" geändert. GitHub-Repo entsprechend umbenannt (`tkorner/moodle-local_admincockpit`). Version auf `2026072300`/`2.0.0` angehoben (Major-Bump statt Patch, da der Rename für bestehende Installationen ein Breaking Change ist – altes Plugin muss vor der Installation von `local_admincockpit` deinstalliert werden). Alte Tags/Releases `v1.0.0`–`v1.2.0` bleiben unter dem alten Namen als historische Commits bestehen (nicht gelöscht/umgeschrieben); neue Historie ab `v2.0.0` läuft unter `local_admincockpit`.
+1. Course count per school including subcategories – assumption "yes", explicitly commented in the code (`classes/metrics/school_metrics.php`), deliberately revisable, not "open" in the sense of undecided
+2. Security overview aggregation – ✅ identified, see research points above
+3. Scheduled tasks URL – ✅ verified, see research points above
+4. Boost Union settings URL – ✅ verified, see research points above
+
+Further decisions documented along the way (no longer open, but deliberate) live in README.md under "Known open assumptions", including the interpretation of the SPEC navigation items and the missing capability restriction on the default navigation links (step 7h).
+
+Extend this list as needed if new open points come up during implementation – don't silently make assumptions and carry on.
 
 ---
 
-## Ergänzende externe Referenz
+## Marketplace submission
 
-Für Security- und CI-Best-Practices zusätzlich konsultieren (falls lokal verfügbar/geklont):
-**MoMoPDA** – "Modular Moodle Plugin Development Assistant", ursprünglich von wilenius
-(https://github.com/wilenius/momopda), geforkt unter https://github.com/tkorner/momopda,
-GPL-3.0. Relevante generische Bausteine: `.prompts/core/security-checklist.md`,
+Checklist lives outside this repo (`Marketplace.md` in the Claude project directory, not in the plugin repo itself). As of 2026-07-22:
+
+- **Compliance audit done:** license headers (all `.php`), GPLv3 `LICENSE`, privacy provider (`null_provider`, since there's no own DB schema, see above), no hits for `eval()`/`unserialize()`/raw `$_REQUEST`/`$_GET`/`$_POST`, no raw SQL concatenation (`$DB->...` with placeholders throughout), settings exclusively via `get_config('local_admincockpit', ...)`/`config_plugins`, no `composer.json` needed, public GitHub issue tracker in place (repo `tkorner/moodle-local_admincockpit`, public, issues enabled) – all ✅, no fixes needed.
+- **CI matrix extended:** previously MariaDB only, now PostgreSQL as well (guideline requires both cross-DB engines) – see `.github/workflows/ci.yml`.
+- **Maturity raised:** `version.php` from `MATURITY_RC`/`1.1.1` to `MATURITY_STABLE`/`1.2.0` for the submission.
+- **Deliberate deviation documented:** `lang/de/` ships already ahead of official AMOS approval – see README.md "Known open assumptions", last item.
+- **Not automated (deliberately, see 2026-07-22 check-in):** screenshots (dashboard + settings) are taken by the user themselves via browser login; actually testing the release zip on a fresh instance (checklist item 8 – the `admin_externalpage_setup()` error class) also remains a manual task before the next day.
+- **Git tag + GitHub release + actual submission to marketplace.moodle.com:** explicitly only after checking in again, not automatically at the end of this session.
+- **Frankenstyle rename (2026-07-23):** `local_admindashboard` was already taken by two unrelated GitHub repos (`UzainAliSiddiqui/moodle-local_admindashboard`, an embedded plugin in `Integer-Training/integermoodle1`) and therefore unusable for the marketplace submission. New, collision-checked name: `local_admincockpit`, visible product name consistently changed to "Admin Cockpit". GitHub repo renamed accordingly (`tkorner/moodle-local_admincockpit`). Version bumped to `2026072300`/`2.0.0` (a major bump rather than a patch, since the rename is a breaking change for existing installations – the old plugin must be uninstalled before installing `local_admincockpit`). Old tags/releases `v1.0.0`–`v1.2.0` remain under the old name as historical commits (not deleted/rewritten); new history from `v2.0.0` onward runs under `local_admincockpit`.
+
+---
+
+## Additional external reference
+
+Also consult for security and CI best practices (if available/cloned locally):
+**MoMoPDA** – "Modular Moodle Plugin Development Assistant", originally by wilenius
+(https://github.com/wilenius/momopda), forked at https://github.com/tkorner/momopda,
+GPL-3.0. Relevant generic building blocks: `.prompts/core/security-checklist.md`,
 `.prompts/core/ci-validation.md`, `.prompts/patterns/database.md`,
 `.prompts/patterns/forms.md`, `.prompts/patterns/navigation.md`,
-`.prompts/patterns/api-usage.md`. Kein plugin-spezifischer `local`-Guide vorhanden
-(Stand aktuell) – die dortigen Guides decken block/enrol/filter/mod/qbank/qtype/report/
-tiny ab, lokale Plugins nur über die generischen Core-Dateien. Bei Bedarf als
-zusätzliche Cross-Referenz nutzen, nicht als primäre Anleitung (diese bleibt SPEC +
+`.prompts/patterns/api-usage.md`. No plugin-type-specific `local` guide exists
+(as of now) – the guides there cover block/enrol/filter/mod/qbank/qtype/report/
+tiny, local plugins only via the generic core files. Use as an additional
+cross-reference where helpful, not as the primary guide (that remains SPEC +
 claude-code-prompt-admincockpit.md).
 
 ---
 
-## Nicht tun
+## Do not
 
-- Keine Runbook-/Doku-Einträge automatisch erzeugen – das erfolgt separat, nach Abschluss und eigenem Review
-- Keine Block-Variante parallel bauen – v1 ist bewusst nur die Seite
-- Keine zusätzlichen Health-Signale über die in der Spec genannten vier hinaus ergänzen, ohne Rückfrage (bewusst reduzierter v1-Scope)
+- Don't auto-generate runbook/documentation entries – that happens separately, after completion and its own review
+- Don't build a block variant in parallel – v1 is deliberately page-only
+- Don't add health signals beyond the four named in the spec without checking in first (deliberately reduced v1 scope)

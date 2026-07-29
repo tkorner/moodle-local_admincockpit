@@ -1,375 +1,377 @@
 # Claude Code Prompt – local_admincockpit
 
-Diese Datei enthält die Schritt-für-Schritt-Sequenz für die Implementierung, basierend auf `SPEC-admincockpit.md`. Jeder Schritt ist als eigener Prompt für Claude Code gedacht – erst nach Bestätigung/Review des einen Schritts zum nächsten übergehen.
+This file contains the step-by-step sequence for the implementation, based on `SPEC-admincockpit.md`. Each step is meant as its own prompt for Claude Code – only move to the next step after the current one has been confirmed/reviewed.
 
-Vor Schritt 1: `SPEC-admincockpit.md` in dasselbe Verzeichnis wie `CLAUDE.md` legen, damit Claude Code beides als Kontext hat. Ein `CLAUDE.md` für dieses Projekt sollte enthalten: Zielumgebung (Moodle 5.2.x in Docker, `/var/www/html/public/local/`), Coding-Standard (core-contribution-taugliche Qualität, Moodle Coding Style), und den Hinweis, dass dies ein Reporting-/Navigations-Plugin ohne eigenes DB-Schema ist.
+Before step 1: place `SPEC-admincockpit.md` in the same directory as `CLAUDE.md`, so Claude Code has both as context. A `CLAUDE.md` for this project should contain: target environment (Moodle 5.2.x in Docker, `/var/www/html/public/local/`), coding standard (core-contribution-grade quality, Moodle Coding Style), and a note that this is a reporting/navigation plugin without its own DB schema.
 
-**Testing-Hinweis (Stand: kein GUI-Zugriff, PHPUnit lokal nicht installierbar):** Statt lokaler PHPUnit-Ausführung werden zwei Ebenen genutzt:
-1. **CLI-Smoke-Skripte** unter `cli/verify_*.php` für sofortiges Feedback während der Session (`docker exec -it claude-moodle-1 php /var/www/html/local/admincockpit/cli/verify_*.php`)
-2. **GitHub Actions mit `moodlehq/moodle-plugin-ci`** für die echte PHPUnit-/Behat-/Codechecker-Ausführung bei jedem Push (siehe Schritt 0b)
+**Testing note (as of: no GUI access, PHPUnit not locally installable):** instead of running PHPUnit locally, two levels are used:
+1. **CLI smoke scripts** under `cli/verify_*.php` for immediate feedback during the session (`docker exec -it claude-moodle-1 php /var/www/html/local/admincockpit/cli/verify_*.php`)
+2. **GitHub Actions with `moodlehq/moodle-plugin-ci`** for the actual PHPUnit/Behat/code-checker run on every push (see step 0b)
 
-PHPUnit-Testdateien werden trotzdem geschrieben (laufen nur nicht lokal, sondern über CI) – nicht weglassen.
+PHPUnit test files are still written despite this (they just don't run locally, only via CI) – don't skip them.
 
-**Fortschritt:** Schritt 0 bis 12 sind umgesetzt und released (siehe Release 1.0.0/1.1.0/1.1.1/2.0.0). Schritt 13 (Fix "davon aktiv" folgt Zeitraum) ist umgesetzt, 2026-07-29 - siehe CLAUDE.md für laufenden Stand statt dieser Zeile fix zu halten.
+**Progress:** Steps 0 through 8 as well as 9 and 10 are implemented (see release 1.0.0 and 1.1.0). Open: step 7h (make navigation configurable), 11 (plugin-directory prerequisites), 12 (final review). Steps 0 through 13 are now implemented and released (see "Progress" in CLAUDE.md for the current, authoritative state instead of this line, which is no longer kept perfectly in sync).
 
 ---
 
-## Schritt 0 – Plugin-Grundgerüst ✅ erledigt
+## Step 0 – Plugin skeleton ✅ done
 
 ```
-Erstelle das Grundgerüst für ein neues Moodle-Plugin vom Typ "local", Komponente
-local_admincockpit, für Moodle 5.2.
+Create the skeleton for a new Moodle plugin of type "local", component
+local_admincockpit, for Moodle 5.2.
 
-Erstelle:
-- version.php (component local_admincockpit, aktuelle Version, requires für Moodle 5.2)
-- lib.php (leer/Platzhalter, mit den üblichen Callback-Stubs falls später benötigt)
-- classes/ (leeres Verzeichnis mit .gitkeep)
-- lang/en/local_admincockpit.php mit Basiseinträgen (pluginname)
-- lang/de/local_admincockpit.php mit den deutschen Übersetzungen der gleichen Strings
-- settings.php: registriert eine eigene Admin-Seite unter Site administration > Reports
-  (admin_externalpage, nicht admin_settingpage, da es keine reinen Konfigurationswerte
-  sondern eine Dashboard-Ansicht ist) plus eine separate Settings-Seite für die
-  Konfiguration (Zeitraum, aktive Schul-Kürzel) unter Site administration > Plugins >
+Create:
+- version.php (component local_admincockpit, current version, requires for Moodle 5.2)
+- lib.php (empty/placeholder, with the usual callback stubs in case they're needed later)
+- classes/ (empty directory with .gitkeep)
+- lang/en/local_admincockpit.php with basic entries (pluginname)
+- lang/de/local_admincockpit.php with the German translations of the same strings
+- settings.php: registers an own admin page under Site administration > Reports
+  (admin_externalpage, not admin_settingpage, since it's a dashboard view rather than
+  plain configuration values) plus a separate settings page for the
+  configuration (time range, active school codes) under Site administration > Plugins >
   Local plugins > Admin Cockpit
-- db/access.php mit der Capability local/admincockpit:view
+- db/access.php with the capability local/admincockpit:view
   (CONTEXT_SYSTEM, archetypes: manager => CAP_ALLOW)
 
-Folge den Moodle-Coding-Guidelines und der Standard-Verzeichnisstruktur für local-Plugins.
-Committe noch nichts, ich möchte das Ergebnis erst reviewen.
+Follow the Moodle coding guidelines and the standard directory structure for local
+plugins. Don't commit anything yet, I want to review the result first.
 ```
 
 ---
 
-## Schritt 1 – Kürzel-Erkennung (Kohorte ↔ Kategorie Matching) ✅ erledigt
+## Step 1 – Code detection (cohort ↔ category matching) ✅ done
 
 ```
-Implementiere die Klasse classes/school_matcher.php (Namespace local_admincockpit).
+Implement the class classes/school_matcher.php (namespace local_admincockpit).
 
-Aufgabe der Klasse:
-- Findet alle system-weiten Kohorten (cohort-Tabelle, contextid = System-Context) mit
-  nicht-leerer idnumber
-- Findet alle Top-Level-Kurskategorien (core_course_category, parent = 0) mit
-  nicht-leerer idnumber
-- Liefert drei Listen zurück:
-  1. "matched": Kürzel, bei denen beide Seiten existieren (idnumber-Übereinstimmung),
-     inkl. Kohorten-ID und Kategorie-ID
-  2. "cohort_only": Kürzel mit Kohorte, aber ohne passende Top-Level-Kategorie
-  3. "category_only": Kürzel mit Top-Level-Kategorie, aber ohne passende Kohorte
+Class responsibilities:
+- Finds all system-wide cohorts (cohort table, contextid = system context) with a
+  non-empty idnumber
+- Finds all top-level course categories (core_course_category, parent = 0) with a
+  non-empty idnumber
+- Returns three lists:
+  1. "matched": codes where both sides exist (idnumber match), including the cohort
+     id and the category id
+  2. "cohort_only": codes with a cohort but no matching top-level category
+  3. "category_only": codes with a top-level category but no matching cohort
 
-Nutze die Moodle Data Manipulation API ($DB->get_records_sql oder get_records mit
-Bedingungen), keine rohen mysqli-Aufrufe. Schreibe dazu einen PHPUnit-Test
-(tests/school_matcher_test.php), der mit dem Moodle-Testdaten-Generator
-(get_data_generator()->create_cohort(), create_category()) mindestens folgende Fälle
-abdeckt: vollständiges Paar, Kohorte ohne Kategorie, Kategorie ohne Kohorte,
-Kürzel mit leerer idnumber wird ignoriert.
+Use the Moodle Data Manipulation API ($DB->get_records_sql or get_records with
+conditions), no raw mysqli calls. Write a PHPUnit test for this
+(tests/school_matcher_test.php), which, using the Moodle test data generator
+(get_data_generator()->create_cohort(), create_category()), covers at least the
+following cases: a complete pair, a cohort without a category, a category without a
+cohort, a code with an empty idnumber gets ignored.
 ```
 
 ---
 
-## Schritt 0b – CI-Pipeline einrichten (nachträglich, jetzt nachholen)
+## Step 0b – Set up CI pipeline (retroactively, catching up now)
 
 ```
-Richte eine GitHub-Actions-Pipeline für dieses Plugin ein, basierend auf
+Set up a GitHub Actions pipeline for this plugin, based on
 moodlehq/moodle-plugin-ci.
 
-Erstelle .github/workflows/ci.yml nach dem Standard-Template von
-moodle-plugin-ci (siehe https://github.com/moodlehq/moodle-plugin-ci für die
-aktuelle empfohlene Workflow-Vorlage). Berücksichtige dabei:
-- Matrix mindestens für die PHP-Version und Moodle-Version, die zur Zielumgebung
-  passen (Moodle 5.2.x-Linie; passende PHP-Version dazu recherchieren, nicht raten)
-- MariaDB als DB-Service (passend zur Zielumgebung, nicht Postgres annehmen)
-- Standard-Schritte: phplint, phpcpd, phpcs (moodle-Ruleset), phpdoc, validate,
-  savepoints, mustache-Lint, grunt, phpunit, behat
-- Workflow soll bei jedem Push und bei Pull Requests laufen
+Create .github/workflows/ci.yml following the standard template from
+moodle-plugin-ci (see https://github.com/moodlehq/moodle-plugin-ci for the
+current recommended workflow template). Take into account:
+- A matrix for at least the PHP version and Moodle version matching the
+  target environment (Moodle 5.2.x line; research the matching PHP version,
+  don't guess)
+- MariaDB as the DB service (matching the target environment, don't assume Postgres)
+- Standard steps: phplint, phpcpd, phpcs (moodle ruleset), phpdoc, validate,
+  savepoints, mustache lint, grunt, phpunit, behat
+- Workflow should run on every push and on pull requests
 
-Erstelle zusätzlich ein kurzes cli/verify_school_matcher.php als Sofort-Check
-(kein Testframework, reines Ausführungsskript mit CLI_SCRIPT-Konstante und
-Ausgabe via print_r), das ich lokal per
-`docker exec -it claude-moodle-1 php ...` laufen lassen kann, ohne auf den
-CI-Lauf warten zu müssen. Dieses Skript testet school_matcher::get_matched()
-gegen die tatsächlichen Daten der laufenden Instanz (kein Testdaten-Generator,
-sondern echte Kohorten/Kategorien) – rein zur Sichtprüfung, kein Ersatz für den
-PHPUnit-Test aus Schritt 1.
+Also create a short cli/verify_school_matcher.php as an instant check
+(no test framework, a plain execution script with the CLI_SCRIPT constant and
+output via print_r) that I can run locally via
+`docker exec -it claude-moodle-1 php ...`, without having to wait for the
+CI run. This script tests school_matcher::get_matched()
+against the actual data of the running instance (not the test-data generator,
+but real cohorts/categories) – purely for a visual check, not a substitute for the
+PHPUnit test from step 1.
 ```
 
 ---
 
-## Schritt 2 – Einstellungsseite (Zeitraum + aktive Kürzel)
+## Step 2 – Settings page (time range + active codes)
 
 ```
-Baue die Konfigurationsseite für local_admincockpit (Site administration > Plugins >
+Build the configuration page for local_admincockpit (Site administration > Plugins >
 Local plugins > Admin Cockpit).
 
-Enthält:
-- Auswahlfeld "Zeitraum für Neu-Zählungen" mit Optionen 30/90/180/360 Tage
-  (Setting-Name: local_admincockpit/timerangedays, Default 180)
-- Mehrfachauswahl "Aktive Schul-Kürzel": Optionen dynamisch aus school_matcher::get_matched()
-  befüllt (nicht hartcodiert), gespeichert als kommagetrennter String oder JSON in
-  local_admincockpit/activeschools
-- Schreibgeschützter Hinweisblock, der cohort_only und category_only aus school_matcher
-  auflistet ("Diese Kürzel sind nur einseitig gepflegt: ...") – als admin_setting_description
-  oder eigenes admin_setting-Element
+Contains:
+- A select field "Time range for new-count metrics" with options 30/90/180/360 days
+  (setting name: local_admincockpit/timerangedays, default 180)
+- A multi-select "Active school codes": options populated dynamically from
+  school_matcher::get_matched() (not hardcoded), stored as a comma-separated string or
+  JSON in local_admincockpit/activeschools
+- A read-only notice block listing cohort_only and category_only from school_matcher
+  ("These codes are only maintained on one side: ...") – as an admin_setting_description
+  or its own admin_setting element
 
-Verwende die Moodle Admin Settings API (admin_setting_configmultiselect o.ä.), keine
-eigene Custom-Form, sofern die Standard-Elemente ausreichen.
+Use the Moodle Admin Settings API (admin_setting_configmultiselect or similar), not a
+custom form, as long as the standard elements are enough.
 ```
 
 ---
 
-## Schritt 3 – Globale Nutzer-Kennzahlen
+## Step 3 – Global user metrics
 
 ```
-Implementiere classes/metrics/user_metrics.php mit einer Klasse, die folgende Werte
-berechnet und als einfaches Datenobjekt/Array zurückgibt:
-- Anzahl aktiver Nutzerkonten (deleted = 0, suspended = 0 -- prüfe im Code, ob suspended
-  hier mitgezählt werden soll oder nicht, und dokumentiere die Entscheidung im Docblock)
-- Anzahl Nutzer mit lastaccess innerhalb der letzten 4 Wochen
-- Anzahl Nutzer mit timecreated innerhalb des konfigurierten Zeitraums
-  (Zeitraum aus dem Setting local_admincockpit/timerangedays)
+Implement classes/metrics/user_metrics.php with a class that computes the following
+values and returns them as a simple data object/array:
+- Number of active user accounts (deleted = 0, suspended = 0 -- check in code whether
+  suspended should be counted here or not, and document the decision in the docblock)
+- Number of users with lastaccess within the last 4 weeks
+- Number of users with timecreated within the configured time range
+  (time range from the local_admincockpit/timerangedays setting)
 
-Schreibe effiziente SQL-Queries (COUNT-Abfragen, keine vollständigen Recordsets laden).
-Ergänze einen PHPUnit-Test mit Testdaten für alle drei Werte (läuft über CI, siehe
-Schritt 0b). Ergänze zusätzlich cli/verify_user_metrics.php für die Sofortprüfung
-gegen die echten Daten der laufenden Instanz.
-```
-
----
-
-## Schritt 4 – Pro-Schule-Kennzahlen
-
-```
-Implementiere classes/metrics/school_metrics.php. Für ein gegebenes Kürzel (mit
-Kohorten-ID und Kategorie-ID aus school_matcher) berechnet die Klasse:
-- Mitgliederzahl der Kohorte (cohort_members Count)
-- Neuzugänge: cohort_members.timeadded innerhalb des konfigurierten Zeitraums
-- Aktive Mitglieder: Join cohort_members -> user, lastaccess innerhalb der letzten 4 Wochen
-- Kurszahl: Kurse in der Kategorie INKLUSIVE Subkategorien (Nutzung des category.path
-  Präfix-Matchings), aber ohne Aufschlüsselung nach Subkategorie in der Rückgabe
-- Neue Kurse: course.timecreated innerhalb des Zeitraums, gleiche Kategorie-Filterung
-
-Wichtig: Bestätige in einem Kommentar im Code die Annahme "Kurszahl inkl. Subkategorien"
-explizit, damit das bei Bedarf leicht revidierbar ist.
-
-Ergänze PHPUnit-Tests mit einer Kategorie, die mindestens eine Subkategorie mit Kursen
-enthält, um das Path-Matching zu verifizieren (läuft über CI, siehe Schritt 0b).
-Ergänze zusätzlich cli/verify_school_metrics.php für die Sofortprüfung gegen ein
-tatsächliches Schul-Kürzel der laufenden Instanz.
+Write efficient SQL queries (COUNT queries, don't load full recordsets).
+Add a PHPUnit test with test data for all three values (runs via CI, see
+step 0b). Also add cli/verify_user_metrics.php for an instant check
+against the real data of the running instance.
 ```
 
 ---
 
-## Schritt 5 – Health-Signale
+## Step 4 – Per-school metrics
 
 ```
-Implementiere classes/metrics/health_signals.php mit vier Methoden:
+Implement classes/metrics/school_metrics.php. For a given code (with the cohort id
+and category id from school_matcher), the class computes:
+- Cohort member count (cohort_members count)
+- New joins: cohort_members.timeadded within the configured time range
+- Active members: join cohort_members -> user, lastaccess within the last 4 weeks
+- Course count: courses in the category INCLUDING subcategories (using the category.path
+  prefix matching), but without a per-subcategory breakdown in the return value
+- New courses: course.timecreated within the time range, same category filtering
 
-1. duplicate_emails(): liefert Anzahl E-Mail-Adressen, die von mehr als einem aktiven
-   Nutzerkonto verwendet werden, sowie eine Detail-Liste (userid, email, fullname) für
-   die Drill-down-Ansicht
-2. courses_without_enddate(): Anzahl und Detail-Liste (courseid, fullname, categoryname)
-   von Kursen mit enddate = 0
-3. security_overview_summary(): Wiederverwendung der bestehenden Core-Klasse/Funktion
-   für den Security-Overview-Report (NICHT neu implementieren) – recherchiere zuerst im
-   Moodle-Core-Code (admin/report/security/), welche Klasse/Methode die Checks ausführt
-   und liefere daraus eine aggregierte Ampel (ok/warning/error mit Anzahl je Status)
-4. cron_status(): Zeitpunkt des letzten Cron-Laufs und Anzahl fehlgeschlagener Tasks in
-   den letzten 24h, basierend auf der Core-Task-Log-Infrastruktur (recherchiere die
-   passende Tabelle/Klasse, statt Tabellennamen zu raten)
+Important: confirm the assumption "course count including subcategories" explicitly
+in a code comment, so it can easily be revised if needed.
 
-Für Punkt 3 und 4: wenn du beim Code-Review feststellst, dass die passende Core-API
-schwerer wiederzuverwenden ist als gedacht, sag mir das explizit, statt eine eigene
-Parallel-Implementierung der Security-Checks zu schreiben.
+Add PHPUnit tests with a category that has at least one subcategory containing courses,
+to verify the path matching (runs via CI, see step 0b).
+Also add cli/verify_school_metrics.php for an instant check against an
+actual school code on the running instance.
 ```
 
 ---
 
-## Schritt 6 – Drill-down-Seiten für Health-Signale
+## Step 5 – Health signals
 
 ```
-Erstelle zwei einfache Seiten (keine Blöcke):
-- duplicateemails.php: zeigt die Detail-Liste aus health_signals::duplicate_emails(),
-  je Zeile ein Link zum Nutzerprofil (user/profile.php?id=X) und ein Hinweis, dass
-  tool_mergeusers für die eigentliche Zusammenführung genutzt werden kann
-- courseswithoutenddate.php: zeigt die Detail-Liste aus
-  health_signals::courses_without_enddate(), je Zeile ein Link direkt in die
-  Kurseinstellungen (course/edit.php?id=X)
+Implement classes/metrics/health_signals.php with four methods:
 
-Beide Seiten benötigen die Capability local/admincockpit:view und einen Zurück-Link
-zur Haupt-Dashboard-Seite. Nutze eine einfache table-Ausgabe (core html_table oder
-core_reportbuilder system_report, je nachdem was mit weniger Code auskommt für diesen
-einfachen Fall).
-```
+1. duplicate_emails(): returns the number of email addresses used by more than one
+   active user account, plus a detail list (userid, email, fullname) for
+   the drill-down view
+2. courses_without_enddate(): number and detail list (courseid, fullname, categoryname)
+   of courses with enddate = 0
+3. security_overview_summary(): reuse the existing core class/function
+   for the security overview report (DO NOT reimplement it) – research first in the
+   Moodle core code (admin/report/security/) which class/method runs the checks
+   and derive an aggregated traffic light from it (ok/warning/error with a count per
+   status)
+4. cron_status(): timestamp of the last cron run and number of failed tasks in
+   the last 24h, based on the core task-log infrastructure (research the
+   matching table/class rather than guessing the table name)
 
----
-
-## Schritt 7 – Haupt-Dashboard-Seite (Rendering)
-
-```
-Baue index.php + classes/output/renderer.php + die Mustache-Templates für die
-Haupt-Dashboard-Seite, die alle bisherigen Bausteine zusammenführt:
-
-Layout (von oben nach unten):
-1. Globale Nutzer-Kennzahlen (Kachel-Reihe)
-2. Pro Schule (nur aktive Kürzel aus den Settings): Kachel-Gruppe mit den 5 Werten aus
-   school_metrics + Link zur Kursverwaltung der Kategorie (course/management.php?categoryid=X)
-3. Health-Signale (4 Kacheln, jede mit Klick-Ziel wie in Schritt 5/6 definiert)
-4. Navigation, gruppiert in Boxen: Nutzerverwaltung, Kursverwaltung, Berichte/Logs,
-   System, Theme/Erscheinungsbild (siehe SPEC Abschnitt 5 für die konkreten Linkziele –
-   recherchiere die exakten URLs/Parameter im Moodle-Core bzw. im installierten
-   theme_boost_union, rate sie nicht)
-
-Zeitraum-Auswahl (30/90/180/360 Tage) soll als Dropdown oben auf der Seite änderbar sein
-und die Seite mit dem gewählten Zeitraum neu laden (GET-Parameter, überschreibt temporär
-den Default aus den Settings, ohne die Einstellung dauerhaft zu ändern).
-
-Zeige "0 Kürzel aktiv konfiguriert" mit Link zur Settings-Seite, falls noch keine Schule
-ausgewählt wurde.
+For points 3 and 4: if you find during the code review that the matching core API
+is harder to reuse than expected, tell me explicitly instead of writing an own
+parallel implementation of the security checks.
 ```
 
 ---
 
-## Schritt 7b – Styling-Verfeinerung: Moodle-/Bootstrap-5-konform statt Custom-CSS
+## Step 6 – Drill-down pages for health signals
 
 ```
-Die Haupt-Dashboard-Seite ist bereits umgesetzt (Schritt 7), funktioniert aber teilweise
-mit eigenem CSS statt Moodle-/Bootstrap-Bordmitteln. Überarbeite das Styling wie folgt,
-ohne die Datenlogik (Metrik-Klassen) anzufassen:
+Create two simple pages (no blocks):
+- duplicateemails.php: shows the detail list from health_signals::duplicate_emails(),
+  one row per line with a link to the user profile (user/profile.php?id=X) and a note
+  that tool_mergeusers can be used for the actual merge
+- courseswithoutenddate.php: shows the detail list from
+  health_signals::courses_without_enddate(), one row per line with a link directly into
+  the course settings (course/edit.php?id=X)
 
-1. Health-Signal-Kacheln: aktuell farbige Rahmen (grün/orange) vermutlich über eigenes
-   CSS umgesetzt. Ersetze das durch $OUTPUT->notification($message, $type) mit den
-   Standard-Typen 'notifysuccess' / 'notifywarning' / 'notifyproblem', ODER falls das
-   Kachel-Layout dadurch bricht, durch Bootstrap-5-Klassen 'border-success' /
-   'border-warning' / 'border-danger' in Kombination mit 'card'. Recherchiere zuerst im
-   Moodle-Core (z.B. wie report/security oder andere Core-Reports Ampel-Status
-   darstellen), um ein bestehendes Muster zu übernehmen statt ein neues zu erfinden.
+Both pages need the local/admincockpit:view capability and a back link
+to the main dashboard page. Use a simple table output (core html_table or
+core_reportbuilder system_report, whichever needs less code for this
+simple case).
+```
 
-2. Ergänze in jeder Health-Signal-Kachel ein Icon zusätzlich zur Randfarbe
-   (Font Awesome, in Moodle über $OUTPUT->pix_icon() oder die 'fa'-Klassen direkt
-   verfügbar) - Häkchen für ok, Warndreieck für Warnung/Fehler. Grund:
-   reine Farbcodierung ist für farbenblinde Nutzer nicht ausreichend unterscheidbar.
+---
 
-3. Prüfe alle verwendeten Bootstrap-Klassen im gesamten Dashboard (Kennzahlen-Kacheln,
-   Navigation-Boxen, Health-Signale) auf Bootstrap-5-Konformität, NICHT Bootstrap-4:
+## Step 7 – Main dashboard page (rendering)
+
+```
+Build index.php + classes/output/renderer.php + the Mustache templates for the
+main dashboard page, bringing together all the building blocks so far:
+
+Layout (top to bottom):
+1. Global user metrics (tile row)
+2. Per school (only the active codes from the settings): tile group with the 5 values
+   from school_metrics + a link to course management for the category
+   (course/management.php?categoryid=X)
+3. Health signals (4 tiles, each with a click-target as defined in step 5/6)
+4. Navigation, grouped into boxes: user management, course management,
+   reports/logs, system, theme/appearance (see SPEC section 5 for the concrete
+   link targets – research the exact URLs/parameters in Moodle core or in
+   the installed theme_boost_union, don't guess them)
+
+The time-range select (30/90/180/360 days) should be a dropdown near the top of the page
+that reloads the page with the chosen time range (GET parameter, temporarily overrides
+the default from the settings, without permanently changing the setting).
+
+Show "0 codes actively configured" with a link to the settings page if no school has
+been selected yet.
+```
+
+---
+
+## Step 7b – Styling refinement: Moodle-/Bootstrap-5-compliant instead of custom CSS
+
+```
+The main dashboard page is already implemented (step 7), but partly uses its own
+CSS instead of Moodle/Bootstrap building blocks. Rework the styling as follows,
+without touching the data logic (metric classes):
+
+1. Health-signal tiles: currently colored borders (green/orange), presumably via own
+   CSS. Replace with $OUTPUT->notification($message, $type) using the
+   standard types 'notifysuccess' / 'notifywarning' / 'notifyproblem', OR, if that
+   breaks the tile layout, with the Bootstrap 5 classes 'border-success' /
+   'border-warning' / 'border-danger' combined with 'card'. Research first in
+   Moodle core (e.g. how report/security or other core reports display traffic-light
+   status) to reuse an existing pattern instead of inventing a new one.
+
+2. Add an icon in addition to the border color in every health-signal tile
+   (Font Awesome, available in Moodle via $OUTPUT->pix_icon() or the 'fa' classes
+   directly) - a checkmark for ok, a warning triangle for warning/error. Reason:
+   color coding alone isn't distinguishable enough for color-blind users.
+
+3. Check all Bootstrap classes used across the whole dashboard (metric tiles,
+   navigation boxes, health signals) for Bootstrap 5 compliance, NOT Bootstrap 4:
    - text-left/text-right -> text-start/text-end
    - ml-*/mr-* -> ms-*/me-*
    - custom-select -> form-select
-   - Weitere BS4-Klassennamen, falls vorhanden, ebenfalls aktualisieren
-   (siehe https://moodledev.io/docs/5.0/guides/bs5migration für die vollständige Liste,
-   falls unsicher)
+   - Other BS4 class names, if any, also updated
+   (see https://moodledev.io/docs/5.0/guides/bs5migration for the full list,
+   if unsure)
 
-4. Kennzahlen-Kacheln (Nutzer gesamt/Aktive Nutzer/Neue Nutzer): prüfe, ob 'card'
-   plus 'card-body' (Bootstrap-Standard-Komponente) eine konsistentere Optik ergibt
-   als die aktuelle freistehende Box-Lösung, im Vergleich zu anderen Moodle-Core-Reports.
-   Kein Muss, aber bewerte es kurz und begründe die gewählte Lösung.
+4. Metric tiles (total users/active users/new users): check whether 'card'
+   plus 'card-body' (Bootstrap standard component) gives a more consistent look
+   than the current free-standing box solution, compared to other Moodle core reports.
+   Not a must, but evaluate it briefly and justify the chosen solution.
 
-Committe erst nach Review. Zeig mir vorher kurz, welche konkrete Core-Stelle du als
-Vorbild für die Ampel-Darstellung (Punkt 1) gefunden hast.
+Only commit after review. Show me first, briefly, which concrete core location you
+found as a model for the traffic-light display (point 1).
 ```
 
 ---
 
-## Schritt 7c – Fix: Icons in Health-Signal-Badges & inkonsistente Kachel-Höhen
+## Step 7c – Fix: icons in health-signal badges & inconsistent tile heights
 
 ```
-Nach Schritt 7b zeigt sich im Browser: die Icons in den OK/Warnung-Badges rendern
-nicht (leerer Platzhalter vor dem Text), was zusätzlich die Zentrierung des Badges
-verschiebt. Ausserdem sind die Security-Overview- und Cron-Status-Kacheln deutlich
-höher als die anderen beiden, weil ihr Text mehrzeilig umbricht.
+After step 7b, the browser shows: the icons in the OK/warning badges don't
+render (an empty placeholder before the text), which also shifts the badge's
+centering. Also, the security-overview and cron-status tiles are noticeably
+taller than the other two, because their text wraps onto multiple lines.
 
-1. Icon-Rendering: Recherchiere zuerst, welche Font-Awesome-Version/welchen
-   Klassen-Präfix Moodle 5.2 core aktuell für Icons einbindet (z.B. ob 'fa fa-check'
-   noch funktioniert oder ob 'fa-solid fa-check' nötig ist) - schau dir dazu an, wie
-   ein Core-Template mit Icon (z.B. in einem Standard-Notification oder einem
-   Core-Report) das Icon einbindet, statt die Klasse zu raten. Korrigiere die
-   Badge-Icons entsprechend. Alternative, falls robuster: $OUTPUT->pix_icon() mit
-   einem passenden Core-Icon-Namen (z.B. 'i/valid' / 'i/warning') statt direkter
-   Font-Awesome-Klassen - bewerte kurz, welcher Weg in diesem Codebase konsistenter
-   ist, und begründe die Wahl.
+1. Icon rendering: first research which Font Awesome version/class prefix Moodle
+   5.2 core currently ships for icons (e.g. whether 'fa fa-check' still works
+   or 'fa-solid fa-check' is needed) - look at how a core template with an icon
+   (e.g. in a standard notification or a core report) embeds the icon, instead of
+   guessing the class. Fix the badge icons accordingly. Alternative, if more robust:
+   $OUTPUT->pix_icon() with a matching core icon name (e.g. 'i/valid' / 'i/warning')
+   instead of direct Font Awesome classes - briefly evaluate which route is more
+   consistent in this codebase, and justify the choice.
 
-2. Badge-Zentrierung: stelle sicher, dass Icon + Text im Badge über eine
-   Flex-Container-Klasse zentriert sind (z.B. 'd-inline-flex align-items-center
-   justify-content-center'), damit die Zentrierung auch bei variabler Icon-Breite
-   stabil bleibt.
+2. Badge centering: make sure icon + text in the badge are centered via a
+   flex-container class (e.g. 'd-inline-flex align-items-center
+   justify-content-center'), so centering stays stable even with a variable icon
+   width.
 
-3. Text kürzen: 
-   - Security-Overview-Kachel: statt "15 ok / 4 Warnung(en) / 0 Fehler" kompakter
-     darstellen, z.B. "15 OK · 4 Warnungen" auf einer Zeile (0 Fehler kann weggelassen
-     werden, wenn 0, oder nur bei > 0 angezeigt werden)
-   - Cron-Status-Kachel: den vollen Zeitstempel ("Saturday, 11. July 2026, 19:11.")
-     durch ein kompakteres Format ersetzen (z.B. relative Zeit "vor 2 Stunden" über
-     Moodle's core userdate()-Funktion mit relativem Format, falls vorhanden -
-     recherchieren statt raten) und den vollen Zeitstempel stattdessen als
-     title-Attribut/Tooltip anbieten
+3. Shorten text:
+   - Security-overview tile: instead of "15 ok / 4 warning(s) / 0 error(s)" show it
+     more compactly, e.g. "15 OK · 4 warnings" on one line (0 errors can be omitted
+     when it's 0, or only shown when > 0)
+   - Cron-status tile: replace the full timestamp ("Saturday, 11. July 2026, 19:11.")
+     with a more compact format (e.g. relative time "2 hours ago" via
+     Moodle's userdate() function with a relative format, if available -
+     research rather than guess) and offer the full timestamp instead as a
+     title attribute/tooltip
 
-4. Kachel-Höhen angleichen: setze alle vier Health-Signal-Kacheln in eine gemeinsame
-   Flex-Reihe mit 'align-items-stretch' und 'h-100' auf den Karten, damit alle vier
-   gleich hoch werden unabhängig von der Textlänge - Badge jeweils am unteren Rand der
-   Karte ausgerichtet (z.B. via 'd-flex flex-column justify-content-between' auf der
-   Card selbst).
+4. Match tile heights: put all four health-signal tiles into a shared flex row with
+   'align-items-stretch' and 'h-100' on the cards, so all four become equally
+   tall regardless of text length - badge aligned at the bottom of the
+   tile in each case (e.g. via 'd-flex flex-column justify-content-between' on the
+   card itself).
 
-Zeig mir vor dem Commit einen Screenshot oder beschreibe kurz, welche Icon-Lösung
-(Font-Awesome-Klasse vs. pix_icon) du gewählt hast und warum.
-```
-
----
-
-## Schritt 7d – Caching der Berechnungen (Moodle Cache API, TTL 1 Tag)
-
-```
-Aktuell werden alle Kennzahlen und Health-Signale bei jedem Seitenaufruf neu berechnet.
-Führe Caching über die Moodle Cache API (MUC) ein, TTL 1 Tag (86400 Sekunden).
-
-1. Definiere db/caches.php mit einer 'application'-Cache-Definition (nicht 'request'
-   oder 'session', da die Werte über Nutzer/Sessions hinweg gleich sein sollen), z.B.
-   'dashboarddata', mit ttl => 86400.
-
-2. Baue die bestehenden Berechnungsklassen (user_metrics, school_metrics,
-   health_signals) so um, dass sie zuerst im Cache nachsehen (cache::make('local_
-   admincockpit', 'dashboarddata')->get($key)) und nur bei Cache-Miss neu rechnen
-   und das Ergebnis zurückschreiben. Cache-Key muss den aktuell gewählten Zeitraum
-   (GET-Parameter) mit einschliessen, da unterschiedliche Zeiträume unterschiedliche
-   Ergebnisse liefern (z.B. Key-Schema 'usermetrics_' . $timerangedays).
-
-3. Baue einen "Cache jetzt leeren"-Button direkt auf der Dashboard-Seite (nicht nur
-   über die generelle Moodle-Cache-Verwaltung erreichbar). Der Button:
-   - erfordert sesskey-Prüfung (require_sesskey())
-   - erfordert dieselbe Capability wie die Dashboard-Seite (local/admincockpit:view)
-     oder eine eigene lokale Kaskade dafür, falls sinnvoll -entscheide, was
-     konsistenter ist
-   - ruft $cache->purge() nur auf die eigene Cache-Definition auf, NICHT
-     purge_all_caches() (das würde die gesamte Instanz treffen, nicht nur dieses
-     Plugin)
-   - zeigt danach eine Bestätigungsmeldung ($OUTPUT->notification(..., 'notifysuccess'))
-     und lädt die Seite mit frisch berechneten Werten neu
-
-4. Zeige auf der Seite dezent an, wann die angezeigten Werte zuletzt berechnet wurden
-   (z.B. "Stand: <Zeitstempel>, wird täglich aktualisiert" unterhalb der Kennzahlen),
-   damit für den Admin klar ist, dass die Zahlen nicht live sind.
-
-5. WICHTIG zur Platzierung: Der "Cache jetzt leeren"-Button wirkt sich auf die
-   GESAMTE Seite aus (globale Kennzahlen, alle Schulen, alle Health-Signale - eine
-   einzige Cache-Definition wird komplett geleert). Platziere ihn deshalb NICHT
-   innerhalb oder direkt unter dem Block "Globale Nutzer-Kennzahlen" (das würde
-   fälschlich suggerieren, er beträfe nur diesen Block), sondern ganz oben auf der
-   Seite auf derselben Zeile wie die Zeitraum-Auswahl, zusammen mit dem
-   "Stand: ..."-Zeitstempel-Hinweis aus Punkt 4. Begründung: beide Elemente
-   (Zeitraum-Umschalter und Cache-Leeren-Button) wirken seitenweit, nicht auf einen
-   einzelnen Block - sie gehören daher optisch zusammen, oberhalb aller
-   Inhalts-Blöcke.
-
-Recherchiere die exakte aktuelle Moodle-Cache-API-Syntax (cache::make(), Definition in
-db/caches.php) im Core-Code, falls unsicher, statt aus dem Gedächtnis zu implementieren
-- die API hat sich über Moodle-Versionen leicht verändert.
+Show me a screenshot before the commit, or briefly describe which icon solution
+(Font Awesome class vs. pix_icon) you chose and why.
 ```
 
 ---
 
-## Schritt 7e – Bootstrap-4-Reste vollständig entfernen
+## Step 7d – Caching the calculations (Moodle Cache API, TTL 1 day)
 
 ```
-Durchsuche das gesamte Plugin (alle Mustache-Templates, ggf. eigenes CSS/SCSS) nach
-verbliebenen Bootstrap-4-Klassennamen und ersetze sie konsequent durch die
-Bootstrap-5-Äquivalente. Prüfe insbesondere:
+Currently, all metrics and health signals are recomputed on every page load.
+Introduce caching via the Moodle Cache API (MUC), TTL 1 day (86400 seconds).
+
+1. Define db/caches.php with an 'application' cache definition (not 'request'
+   or 'session', since the values should be the same across users/sessions), e.g.
+   'dashboarddata', with ttl => 86400.
+
+2. Rework the existing calculation classes (user_metrics, school_metrics,
+   health_signals) so they first check the cache (cache::make('local_
+   admincockpit', 'dashboarddata')->get($key)) and only recompute and write back
+   the result on a cache miss. The cache key must include the currently selected
+   time range (GET parameter), since different time ranges yield
+   different results (e.g. key scheme 'usermetrics_' . $timerangedays).
+
+3. Build a "Purge cache now" button directly on the dashboard page (not only
+   reachable via general Moodle cache management). The button:
+   - requires a sesskey check (require_sesskey())
+   - requires the same capability as the dashboard page (local/admincockpit:view)
+     or an own local cascade for it, if that makes more sense - decide what's
+     more consistent
+   - calls $cache->purge() only on this plugin's own cache definition, NOT
+     purge_all_caches() (that would hit the entire instance, not just this
+     plugin)
+   - afterwards shows a confirmation message ($OUTPUT->notification(..., 'notifysuccess'))
+     and reloads the page with freshly computed values
+
+4. Subtly show on the page when the displayed values were last computed
+   (e.g. "As of: <timestamp>, updated daily" below the metrics),
+   so it's clear to the admin that the numbers aren't live.
+
+5. IMPORTANT regarding placement: the "Purge cache now" button affects the
+   ENTIRE page (global metrics, all schools, all health signals - a single
+   cache definition gets purged completely). So place it NOT
+   inside or directly under the "Global user metrics" block (that would
+   wrongly suggest it only affects that block), but at the very top of the
+   page on the same row as the time-range selector, together with the
+   "As of: ..." timestamp note from point 4. Reasoning: both elements
+   (the time-range switcher and the cache-purge button) act page-wide, not on a
+   single block - they therefore belong together visually, above all
+   content blocks.
+
+Research the exact current Moodle Cache API syntax (cache::make(), definition in
+db/caches.php) in the core code if unsure, instead of implementing from
+memory - the API has changed slightly across Moodle versions.
+```
+
+---
+
+## Step 7e – Fully remove Bootstrap 4 leftovers
+
+```
+Search the entire plugin (all Mustache templates, any own CSS/SCSS) for
+remaining Bootstrap 4 class names and consistently replace them with the
+Bootstrap 5 equivalents. Check in particular:
 - text-left/text-right -> text-start/text-end
 - ml-*/mr-*, pl-*/pr-* -> ms-*/me-*, ps-*/pe-*
 - float-left/float-right -> float-start/float-end
@@ -377,282 +379,282 @@ Bootstrap-5-Äquivalente. Prüfe insbesondere:
 - rounded-left/rounded-right -> rounded-start/rounded-end
 - custom-select -> form-select
 - sr-only -> visually-hidden
-- .close (Button-Klasse) -> .btn-close
+- .close (button class) -> .btn-close
 - font-weight-* -> fw-*
 - font-italic -> fst-italic
 - no-gutters -> g-0
 
-Nutze https://moodledev.io/docs/5.0/guides/bs5migration als Referenz für die
-vollständige Liste, falls im Code weitere BS4-Muster auftauchen, die hier nicht
-aufgeführt sind. Liste am Ende kurz auf, was du gefunden und ersetzt hast, damit ich
-das gegenlesen kann, bevor committet wird.
+Use https://moodledev.io/docs/5.0/guides/bs5migration as a reference for the
+full list, in case further BS4 patterns show up in the code that aren't
+listed here. List briefly at the end what you found and replaced, so I
+can review it before it gets committed.
 ```
 
 ---
 
-## Schritt 7f – Moodle-Event für Dashboard-Aufrufe
+## Step 7f – Moodle event for dashboard views
 
 ```
-Implementiere ein Standard-Moodle-Event nach Core-Konvention:
+Implement a standard Moodle event following core convention:
 
-1. classes/event/dashboard_viewed.php - Event-Klasse, die von \core\event\base
-   erbt, CRUD 'r' (read), Edulevel 'other' (kein Lern-bezogenes Event), Objekttabelle
-   nicht zutreffend (kein DB-Objekt, das betrachtet wird - orientiere dich an einem
-   Core-Beispiel für ein reines "Seite aufgerufen"-Event ohne zugehörigen Datensatz,
-   z.B. wie andere Report-Seiten das lösen, statt es zu raten)
+1. classes/event/dashboard_viewed.php - event class extending \core\event\base,
+   CRUD 'r' (read), edulevel 'other' (not a learning-related event), object table
+   not applicable (no DB object being viewed - look at a core example for a
+   plain "page viewed" event with no associated record, e.g. how other report
+   pages solve this, instead of guessing it)
 
-2. Löse das Event in index.php aus, sobald die Seite erfolgreich mit gültiger
-   Capability aufgerufen wird (nach dem Capability-Check, vor dem Rendering)
+2. Trigger the event in index.php as soon as the page is successfully accessed with
+   a valid capability (after the capability check, before rendering)
 
-3. lang/en/ und lang/de/ um die Event-Beschreibung ergänzen
+3. Add the event description to lang/en/ and lang/de/
    (get_string('eventdashboardviewed', ...))
 
-4. Kurz verifizieren: das Event sollte danach in Site administration > Reports >
-   Logs auftauchen, wenn die Dashboard-Seite aufgerufen wird - das im Anschluss an
-   die Umsetzung einmal testen und mir kurz Bescheid geben, ob es erscheint.
+4. Briefly verify afterwards: the event should then show up under Site administration >
+   Reports > Logs when the dashboard page is accessed - test that once
+   after implementing it and let me know briefly whether it shows up.
 ```
 
 ---
 
-## Schritt 7g – Fix: Cache-Key für Pro-Schule-Werte fehlt Zeitraum-Komponente
+## Step 7g – Fix: cache key for per-school values is missing the time-range component
 
 ```
-Beim Caching in Schritt 7d wurde der Zeitraum nur im Cache-Key der globalen
-Nutzer-Kennzahlen berücksichtigt, nicht bei school_metrics. Das führt dazu, dass beim
-Umschalten des Zeitraums (30/90/180/360 Tage) die Werte "Neuzugänge im Zeitraum" und
-"Neue Kurse im Zeitraum" pro Schule weiterhin die zuvor gecachten Zahlen des alten
-Zeitraums anzeigen, obwohl der Rest der Seite bereits den neuen Zeitraum nutzt.
+When caching was introduced in step 7d, the time range was only taken into account
+in the cache key of the global user metrics, not in school_metrics. This means
+that when switching the time range (30/90/180/360 days), the "new joins" and
+"new courses" values per school still show the previously cached numbers for the
+old time range, even though the rest of the page already uses the new
+time range.
 
-Korrigiere den Cache-Key in school_metrics so, dass er sowohl das Schul-Kürzel als
-auch den gewählten Zeitraum enthält, z.B. 'schoolmetrics_' . $kuerzel . '_' .
+Fix the cache key in school_metrics so it includes both the school code
+and the selected time range, e.g. 'schoolmetrics_' . $code . '_' .
 $timerangedays.
 
-Prüfe im Gegenzug health_signals: dort hängt keiner der vier Werte vom
-Zeitraum-Parameter ab (Duplikate, Kurse ohne Enddatum, Security-Overview, Cron-Status
-sind zeitraum-unabhängig) - stelle sicher, dass dort der Cache-Key NICHT unnötig den
-Zeitraum enthält, sonst würden diese Werte öfter neu berechnet als nötig, ohne
-Mehrwert.
+Conversely, check health_signals: none of the four values there depend on the
+time-range parameter (duplicates, courses without an end date, security overview,
+cron status are all time-range independent) - make sure the cache key there does
+NOT unnecessarily include the time range, otherwise those values would get
+recomputed more often than needed, with no benefit.
 
-Teste nach der Korrektur manuell: Zeitraum umschalten, prüfen ob sich "Neuzugänge"/
-"Neue Kurse" pro Schule tatsächlich ändern, nicht nur die globalen Werte.
+After the fix, test manually: switch the time range, check whether "new joins"/
+"new courses" per school actually change, not just the global values.
 ```
 
 ---
 
-## Schritt 7h – Navigation konfigurierbar machen (Textarea-Setting statt hartcodierter Links)
+## Step 7h – Make navigation configurable (textarea setting instead of hardcoded links)
 
 ```
-Die Navigation-Links sind aktuell hartcodiert im Renderer/Templates. Mache sie
-konfigurierbar, nach dem Muster von Moodles eigenem Custom-Menu
-($CFG->custommenuitems), damit das Plugin auch auf anderen Moodle-Instanzen ohne
-Code-Änderung nutzbar ist.
+The navigation links are currently hardcoded in the renderer/templates. Make them
+configurable, following the pattern of Moodle's own custom menu
+($CFG->custommenuitems), so the plugin can be used on other Moodle instances
+without a code change.
 
-1. Neue Einstellung 'navitems' vom Typ admin_setting_configtextarea in
-   settings.php. Format pro Zeile (Pipe-getrennt), 3 oder 4 Segmente (Capability
-   optional, bei 3 Segmenten wird kein Capability-Check durchgeführt):
-   Titel|URL|Gruppe|Capability(optional)
-   Jedes Segment beim Parsen trimmen (führende/nachfolgende Leerzeichen entfernen),
-   damit "Titel | URL" genauso funktioniert wie "Titel|URL".
-   Beispiel:
-   Nutzer hochladen|/admin/user/user_bulk.php|Nutzerverwaltung|moodle/user:create
-   Kohorten verwalten|/cohort/index.php|Nutzerverwaltung|moodle/cohort:manage
+1. New setting 'navitems' of type admin_setting_configtextarea in
+   settings.php. Format per line (pipe-separated), 3 or 4 segments (capability
+   optional, with 3 segments no capability check is performed):
+   Title|URL|Group|Capability(optional)
+   Trim every segment when parsing (remove leading/trailing whitespace),
+   so "Title | URL" works the same as "Title|URL".
+   Example:
+   Upload users|/admin/user/user_bulk.php|User management|moodle/user:create
+   Manage cohorts|/cohort/index.php|User management|moodle/cohort:manage
    Scheduled Tasks|/admin/tool/task/scheduledtasks.php|System|moodle/site:config
 
-   Orientiere dich am Parsing-Ansatz, den Moodle-Core für custommenuitems selbst
-   verwendet (im Core-Code nachsehen, wie dort Zeilen/Pipes zerlegt werden), statt
-   eine komplett eigene Parsing-Logik zu erfinden.
+   Base the parsing approach on what Moodle core itself uses for custommenuitems
+   (look it up in the core code how lines/pipes are split there), instead of
+   inventing a completely own parsing logic.
 
-2. Fülle 'navitems' mit einem sinnvollen Default vor, der genau die aktuell
-   hartcodierten Links enthält (alle bisherigen Einträge aus Abschnitt 5 der SPEC),
-   damit bestehende Installationen (auch unsere eigene) nach dem Update ohne
-   Handarbeit weiterlaufen. Die Boost-Union-Theme-Einstellungen-Zeile nur vorbelegen,
-   wenn theme_boost_union tatsächlich installiert ist (sonst weglassen).
+2. Pre-fill 'navitems' with a sensible default that contains exactly the
+   currently hardcoded links (all entries from SPEC section 5), so
+   existing installations (including our own) keep working after the update without
+   manual work. Only pre-fill the Boost Union theme-settings line if
+   theme_boost_union is actually installed (otherwise omit it).
 
-3. Renderer: Navigation-Gruppen (Kartenüberschriften) werden dynamisch aus den in
-   'navitems' vorkommenden Gruppennamen gebildet, nicht mehr hartcodiert. Reihenfolge
-   der Gruppen: Erstauftreten in der Einstellung.
+3. Renderer: navigation groups (card headings) are built dynamically from the
+   group names occurring in 'navitems', no longer hardcoded. Order of the
+   groups: order of first occurrence in the setting.
 
-4. Vor jedem Link-Rendering: falls eine Capability angegeben ist, mit
-   has_capability() prüfen (Kontext: System, da wir hier bewusst bei
-   system-weiten Administratoren bleiben, keine Kategorie-/kontextsensitive Prüfung
-   nötig) und den Link nur zeigen, wenn erfüllt. Ohne Capability-Angabe: immer zeigen
-   (Fallback für Admins, die die Capability-Spalte nicht nutzen wollen).
+4. Before rendering each link: if a capability is given, check it with
+   has_capability() (context: system, since we deliberately stay with
+   system-wide administrators here, no category-/context-sensitive check
+   needed) and only show the link if it passes. Without a capability given: always
+   show it (fallback for admins who don't want to use the capability column).
 
-5. Fehlerhafte/unparsebare Zeilen (falsches Format, mehr/weniger als 3-4 Segmente):
-   nicht zum Fatal Error führen, sondern die Zeile überspringen und optional eine
-   admin_setting_description mit einem Hinweis "X Zeile(n) konnten nicht geparst
-   werden" oberhalb der Textarea anzeigen.
+5. Malformed/unparseable lines (wrong format, more/fewer than 3-4 segments):
+   don't cause a fatal error, just skip the line and optionally show an
+   admin_setting_description with a note "X line(s) could not be
+   parsed" above the textarea.
 
-6. Ist 'navitems' komplett leer (z.B. absichtlich vom Admin geleert), muss die
-   Navigation-Sektion sauber leer bleiben (kein Fatal Error, keine leeren Boxen mit
-   Überschrift ohne Inhalt) - am besten komplett ausblenden mit optionalem Hinweistext
-   "Keine Navigationselemente konfiguriert" plus Link zu den Einstellungen.
+6. If 'navitems' is completely empty (e.g. deliberately cleared by the admin), the
+   navigation section must stay cleanly empty (no fatal error, no empty boxes with
+   a heading and no content) - best hidden completely, with an optional note text
+   "No navigation items configured" plus a link to the settings.
 
-Ergänze ein cli/verify_navitems.php zur Sofortprüfung des Parsings gegen die
-konfigurierten Werte der laufenden Instanz.
+Add a cli/verify_navitems.php for an instant check of the parsing against the
+configured values on the running instance.
 ```
 
 ---
 
-## Schritt 9 – Generalisierung: "Schule" durch konfigurierbaren Begriff ersetzen
+## Step 9 – Generalization: replace "school" with a configurable term
 
 ```
-Der Begriff "Schule" ist aktuell an mehreren Stellen im UI hartcodiert (Kachel-
-Überschriften, Settings-Beschriftungen, ggf. Sprachdateien). Für die Veröffentlichung
-soll das Plugin für beliebige Gruppierungen (Standorte, Abteilungen, Mandanten,
-Fakultäten) nutzbar sein, nicht nur für Schulen.
+The term "school" is currently hardcoded in several places in the UI (tile
+headings, settings labels, possibly language files). For the release,
+the plugin should be usable for arbitrary groupings (sites, departments, tenants,
+faculties), not just schools.
 
-1. Neue Einstellung 'groupinglabel' (Freitext, admin_setting_configtext), Default-Wert
-   "Schule" (damit sich für unsere eigene Instanz nichts ändert), Beschreibung z.B.
-   "Bezeichnung für die Gruppierung aus Kohorte + Kategorie (z.B. Schule, Standort,
-   Abteilung, Fakultät)"
+1. New setting 'groupinglabel' (free text, admin_setting_configtext), default value
+   "School" (so nothing changes for our own instance), description e.g.
+   "Label for the grouping made of cohort + category (e.g. school, site,
+   department, faculty)"
 
-2. Ersetze alle hartcodierten Vorkommen von "Schule"/"Schulen" im UI (Kachel-
-   Überschrift "Pro Schule", Settings-Beschriftungen wie "Aktive Schul-Kürzel") durch
-   dynamische Verwendung von get_config('local_admincockpit', 'groupinglabel')
-   bzw. eine entsprechende Sprachstring-Platzhalter-Lösung (get_string mit $a-Platzhalter
-   statt hartcodiertem Substantiv).
+2. Replace all hardcoded occurrences of "school"/"schools" in the UI (tile
+   heading "Per school", settings labels like "Active school codes") with
+   dynamic use of get_config('local_admincockpit', 'groupinglabel')
+   or an equivalent language-string placeholder solution (get_string with an $a
+   placeholder instead of a hardcoded noun).
 
-3. Rein interne Bezeichner (Variablennamen wie $kuerzel, Methodennamen wie
-   school_matcher, school_metrics) NICHT umbenennen - das ist reine UI-Generalisierung,
-   kein Rename der internen Architektur. Aufwand sonst unnötig hoch für keinen
-   Nutzerwert.
+3. Do NOT rename purely internal identifiers (variable names like $code,
+   method names like school_matcher, school_metrics) - this is purely a UI
+   generalization, not a rename of the internal architecture. Otherwise the effort
+   is unnecessarily high for no user-facing value.
 
-4. Prüfe Sprachdateien (en/de) auf verbleibende hartcodierte "school"/"Schule"-Strings
-   in UI-sichtbaren get_string()-Werten und passe sie auf die generische Formulierung
-   an (z.B. "Kohorten-/Kategorie-Gruppierungen" als Fallback-Formulierung, wenn kein
-   Platzhalter sinnvoll einsetzbar ist).
-```
-
----
-
-## Schritt 10 – Leerer-Zustand-Test bei 0 konfigurierten Gruppen
-
-```
-Teste und stelle sicher, dass das Dashboard sauber funktioniert, wenn 'activeschools'
-(bzw. wie in Schritt 9 ggf. umbenannt) komplett leer ist - der Zustand einer frisch
-installierten Instanz ohne konfigurierte Gruppierungen.
-
-Erwartetes Verhalten:
-- Kein Fatal Error, keine leere/kaputte "Pro Schule"-Sektion
-- Stattdessen ein Hinweis mit Link zur Einstellungsseite, z.B. "Keine [groupinglabel]
-  konfiguriert. Zu den Einstellungen." (Text nutzt den generischen Begriff aus
-  Schritt 9)
-- Globale Nutzer-Kennzahlen und Health-Signale bleiben davon unberührt und
-  funktionieren weiterhin normal
-
-Falls beim Testen ein Fehler auftritt (z.B. weil eine Berechnung von mindestens einem
-Element in der Kürzel-Liste ausgeht), fixe die betroffene Stelle in school_metrics
-bzw. dem Renderer.
+4. Check language files (en/de) for remaining hardcoded "school"/"Schule" strings
+   in user-visible get_string() values and adjust them to the generic wording
+   (e.g. "cohort/category groupings" as a fallback wording where no
+   placeholder makes sense).
 ```
 
 ---
 
-## Schritt 11 – Formale Voraussetzungen für Moodle Plugin Directory
+## Step 10 – Empty-state test with 0 configured groups
 
 ```
-Ergänze die für eine Veröffentlichung im Moodle Plugin Directory zwingend nötigen
-Bestandteile:
+Test and make sure the dashboard works cleanly when 'activeschools'
+(or however it may have been renamed in step 9) is completely empty - the
+state of a freshly installed instance with no configured groupings.
 
-1. classes/privacy/provider.php: da das Plugin selbst keine personenbezogenen Daten
-   SPEICHERT (nur zur Laufzeit aus bestehenden Core-Tabellen liest/aggregiert),
-   implementiere \core_privacy\local\metadata\null_provider mit einer klaren
-   Begründung als Sprachstring (get_string('privacy:metadata', ...) mit Erklärung,
-   warum keine eigenen Daten gespeichert werden). Recherchiere zuerst im Moodle-Core,
-   wie andere reine Report-/Dashboard-Plugins ohne eigene Datenspeicherung ihre
-   Privacy-Provider-Klasse aufbauen, statt es zu raten.
+Expected behavior:
+- No fatal error, no empty/broken "Per school" section
+- Instead a note with a link to the settings page, e.g. "No [groupinglabel]
+  configured. Go to settings." (text uses the generic term from
+  step 9)
+- Global user metrics and health signals remain unaffected by this and keep
+  working normally
 
-2. README.md im Repo-Root: Kurzbeschreibung, Voraussetzungen (Moodle-Version,
-   ggf. PHP-Version), Installationsanleitung, Hinweis auf die Konfiguration
-   (Zeitraum, Gruppierungs-Kürzel, Navigation-Textarea), Lizenzhinweis, mindestens
-   1-2 Screenshots (Platzhalter-Verweis, falls Bilder separat eingefügt werden müssen)
-
-3. LICENSE-Datei: GPLv3-Volltext (Standard-Lizenz für Moodle-Plugins)
-
-4. Vervollständige lang/en/local_admincockpit.php als vollständige Basissprache -
-   das ist Pflicht für den Directory-Eintrag, auch wenn lang/de/ die primäre
-   Nutzungssprache bleibt
-
-5. Prüfe, ob irgendwo externe JS-Bibliotheken eingebunden wurden (z.B. für Chart-
-   Darstellung, falls verwendet) - falls ja, thirdpartylibs.xml ergänzen mit
-   Lizenzangaben. Falls keine externen Libraries verwendet werden, kurz bestätigen.
-
-6. version.php: $plugin->maturity (z.B. MATURITY_STABLE) und $plugin->release
-   sauber gesetzt, falls noch nicht geschehen.
+If an error occurs during testing (e.g. because some calculation assumes at
+least one element in the code list), fix the affected spot in school_metrics
+or the renderer.
 ```
 
 ---
 
-## Schritt 12 – Review, Sprachdateien, Abschluss
+## Step 11 – Formal requirements for the Moodle Plugin Directory
 
 ```
-1. Vervollständige lang/en/ und lang/de/ mit allen bisher verwendeten get_string()-Keys
-2. Prüfe alle Schritte gegen die Moodle Coding Guidelines (phpcs mit dem
-   moodle-Ruleset, falls lokal verfügbar)
-3. Liste alle Stellen im Code auf, die mit "TODO: verify" oder ähnlichen Markierungen
-   auf offene Annahmen aus der SPEC hinweisen (siehe SPEC Abschnitt 8), damit ich diese
-   gezielt gegenlesen kann, bevor das Plugin in Produktion geht
-4. Erstelle KEINEN Runbook-/Doku-Eintrag automatisch – das mache ich separat, sobald
-   das Plugin final getestet ist
-```
+Add the components strictly required for a release in the Moodle Plugin Directory:
 
----
+1. classes/privacy/provider.php: since the plugin itself doesn't STORE any personal
+   data (it only reads/aggregates existing core tables at request time),
+   implement \core_privacy\local\metadata\null_provider with a clear
+   justification as a language string (get_string('privacy:metadata', ...) explaining
+   why no own data is stored). Research first in Moodle core how
+   other plain report/dashboard plugins without their own data storage build their
+   privacy provider class, instead of guessing it.
 
-## Schritt 13 – Fix: "davon aktiv" (global + pro Schule) folgt dem Zeitraum statt fixer 4 Wochen ✅ erledigt
+2. README.md in the repo root: short description, requirements (Moodle version,
+   PHP version if relevant), installation instructions, a note on the configuration
+   (time range, grouping code, navigation textarea), a license note, at least
+   1-2 screenshots (placeholder reference, if images need to be added separately)
 
-```
-Bisher waren die Kennzahlen "davon aktiv" (global, user_metrics::count_recently_active_users())
-und "Aktive Mitglieder" (pro Schule, school_metrics::count_active_members()) unabhängig vom
-Setting local_admincockpit/timerangedays fest auf die letzten 4 Wochen codiert, während
-"Neue Nutzer im Zeitraum"/"Neuzugänge im Zeitraum" den konfigurierten/gewählten Zeitraum
-nutzen - eine Inkonsistenz zwischen jeweils zwei nebeneinander angezeigten Kennzahlen.
+3. LICENSE file: full GPLv3 text (standard license for Moodle plugins)
 
-Entscheidung (2026-07-29): kein separates "Aktiv-Schwelle"-Setting (SPEC §11 hatte das als
-v2-Kandidat vorgesehen, wurde aber explizit verworfen) - beide "aktiv"-Kennzahlen nutzen
-stattdessen denselben local_admincockpit/timerangedays-Wert wie die jeweilige "neu"-Kennzahl.
-Ein gemeinsamer Zeitraum ist einfacher zu verstehen als zwei getrennte Werte. Ursprünglich
-(erste Umsetzung dieses Schritts) nur für die globale Kennzahl gemacht, dann nachträglich
-auf "Aktive Mitglieder" pro Schule erweitert, nach demselben Muster.
+4. Complete lang/en/local_admincockpit.php as a fully complete base language -
+   this is mandatory for the directory listing, even though lang/de/ remains the
+   primary usage language
 
-1. classes/metrics/user_metrics.php: count_recently_active_users() bekommt den Parameter
-   int $timerangedays statt der fixen 4 * WEEKSECS-Berechnung; compute_metrics() reicht den
-   bereits vorhandenen $timerangedays-Parameter durch.
-2. classes/metrics/school_metrics.php: count_active_members() bekommt ebenfalls den
-   Parameter int $timerangedays statt der fixen 4 * WEEKSECS-Berechnung; compute_metrics()
-   reicht den bereits vorhandenen $timerangedays-Parameter durch.
-3. lang/en/ und lang/de/: KEIN neuer Setting-Label-String - nur der bestehende Hilfetext
-   von timerangedays_desc wird ergänzt, dass er jetzt auch "aktive Nutzer" (und implizit
-   "Aktive Mitglieder") steuert.
-4. tests/metrics/user_metrics_test.php und tests/metrics/school_metrics_test.php: bestehende
-   Tests für "davon aktiv"/"Aktive Mitglieder" so anpassen, dass sie mit einem engen
-   Zeitraum (z.B. 30 Tage) arbeiten statt mit den bisherigen festen 4-Wochen-Fixturen, plus
-   je einen zusätzlichen Test, der belegt, dass ein weiterer Zeitraum (z.B. 90 Tage) einen
-   Account/ein Mitglied korrekt mit einschliesst, der/das bei 30 Tagen noch ausgeschlossen
-   war.
-5. cli/verify_user_metrics.php und cli/verify_school_metrics.php: Ausgabezeile anpassen,
-   damit ersichtlich ist, dass timerangedays jetzt für activeusers/activemembers UND
-   newusers/newmembers gilt.
-6. SPEC-admincockpit.md: §3 ("davon aktiv", "Aktive Mitglieder") und §11 (Aktiv-Schwelle als
-   verworfen markieren, nicht löschen) entsprechend nachziehen.
+5. Check whether any external JS libraries were embedded anywhere (e.g. for chart
+   display, if used) - if so, add thirdpartylibs.xml with
+   license details. If no external libraries are used, briefly confirm that.
 
-Kein Cache-Key-Fix nötig (siehe Schritt 7d/7g) - die Cache-Keys von user_metrics und
-school_metrics enthalten $timerangedays bereits vollständig, keine Änderung an caches.php
-erforderlich.
-
-Verifiziert: vendor/bin/phpunit --testsuite local_admincockpit_testsuite im Container,
-38/38 Tests grün nach Neuinitialisierung (php public/admin/tool/phpunit/cli/init.php war
-nötig, da phpunit/phpunit als Composer-Dev-Dependency zuvor nicht installiert war -
-composer install im Container nachgeholt).
+6. version.php: $plugin->maturity (e.g. MATURITY_STABLE) and $plugin->release
+   set cleanly, if not already done.
 ```
 
 ---
 
-## Hinweise für die Session
+## Step 12 – Review, language files, wrap-up
 
-- Plugin-Namen, Capability-Namen und Tabellennamen aus dieser Datei sind Vorschläge,
-  keine fixen Vorgaben – wenn ein Moodle-Konventions-Check etwas anderes nahelegt,
-  abweichen und kurz begründen.
-- Bei Unsicherheit über exakte Core-APIs (Security Overview, Task-Log, Boost Union
-  Settings-URL): recherchieren statt raten, und wenn unklar, explizit nachfragen statt
-  eine Vermutung zu implementieren.
-- Jeder Schritt sollte für sich lauffähig/testbar sein, bevor der nächste beginnt.
+```
+1. Complete lang/en/ and lang/de/ with all get_string() keys used so far
+2. Check all steps against the Moodle Coding Guidelines (phpcs with the
+   moodle ruleset, if available locally)
+3. List all places in the code marked with "TODO: verify" or similar
+   markers pointing to open assumptions from the SPEC (see SPEC section 8), so I
+   can specifically review these before the plugin goes into production
+4. Do NOT create a runbook/documentation entry automatically – I'll do that separately,
+   once the plugin has been fully tested
+```
+
+---
+
+## Step 13 – Fix: "of which active" (global + per school) follows the time range instead of a fixed 4 weeks ✅ done
+
+```
+Previously, both the global metric "of which active" (user_metrics::count_recently_active_users())
+and the per-school metric "Active members" (school_metrics::count_active_members()) were
+hardcoded to the last 4 weeks, independent of the local_admincockpit/timerangedays
+setting, while "New users in period"/"New joins in period" already used the
+configured/selected time range - an inconsistency between two side-by-side
+displayed metrics in each case.
+
+Decision (2026-07-29): no separate "active threshold" setting (SPEC §11 had this
+planned as a v2 candidate, but it was explicitly rejected) - both "active" metrics
+now use the same local_admincockpit/timerangedays value as the respective "new"
+metric. A shared time range is easier to reason about than two separate values.
+Originally (first implementation of this step) only done for the global metric, then
+subsequently extended to "Active members" per school, following the same pattern.
+
+1. classes/metrics/user_metrics.php: count_recently_active_users() gets the parameter
+   int $timerangedays instead of the fixed 4 * WEEKSECS calculation; compute_metrics()
+   passes through the already-existing $timerangedays parameter.
+2. classes/metrics/school_metrics.php: count_active_members() also gets the
+   parameter int $timerangedays instead of the fixed 4 * WEEKSECS calculation;
+   compute_metrics() passes through the already-existing $timerangedays parameter.
+3. lang/en/ and lang/de/: NO new setting-label string - only the existing help text
+   of timerangedays_desc gets extended to note that it now also controls "active
+   users" (and implicitly "Active members").
+4. tests/metrics/user_metrics_test.php and tests/metrics/school_metrics_test.php:
+   adjust the existing tests for "of which active"/"Active members" to use a
+   narrow time range (e.g. 30 days) instead of the previous fixed 4-week fixtures,
+   plus one additional test each proving that a wider time range (e.g. 90 days)
+   correctly includes an account/member that was still excluded at 30 days.
+5. cli/verify_user_metrics.php and cli/verify_school_metrics.php: adjust the output
+   line so it's clear that timerangedays now applies to activeusers/activemembers AND
+   newusers/newmembers.
+6. SPEC-admincockpit.md: update §3 ("of which active", "Active members") and §11
+   (mark the active-threshold idea as rejected, don't delete it) accordingly.
+
+No cache-key fix needed (see steps 7d/7g) - the cache keys of user_metrics and
+school_metrics already fully include $timerangedays, no change to caches.php
+required.
+
+Verified: vendor/bin/phpunit --testsuite local_admincockpit_testsuite in the
+container, 38/38 tests green after re-initialization (php public/admin/tool/phpunit/cli/init.php
+was needed, since phpunit/phpunit as a Composer dev dependency wasn't installed
+beforehand - composer install caught up on this in the container).
+```
+
+---
+
+## Notes for the session
+
+- Plugin names, capability names, and table names in this file are suggestions,
+  not fixed requirements – if a Moodle convention check suggests something else,
+  deviate and briefly explain why.
+- When unsure about exact core APIs (Security Overview, task log, Boost Union
+  settings URL): research instead of guessing, and when unclear, ask explicitly
+  instead of implementing a guess.
+- Every step should be runnable/testable on its own before the next one starts.
