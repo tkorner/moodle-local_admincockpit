@@ -50,10 +50,12 @@ class user_metrics {
      * where possible (see db/caches.php - 1 day TTL, since these numbers are
      * deliberately not live).
      *
-     * @param int $timerangedays length of the "new in period" window, in days
-     * @return \stdClass with totalusers, activeusers (lastaccess in the last
-     *         4 weeks), newusers (timecreated within $timerangedays), and
-     *         computedat (unix timestamp of when this was last computed,
+     * @param int $timerangedays length of the "new in period" and "active"
+     *        window, in days (both metrics share the same period, by design -
+     *        see docblock on count_recently_active_users())
+     * @return \stdClass with totalusers, activeusers (lastaccess within
+     *         $timerangedays), newusers (timecreated within $timerangedays),
+     *         and computedat (unix timestamp of when this was last computed,
      *         not necessarily this request)
      */
     public static function get_metrics(int $timerangedays): \stdClass {
@@ -80,7 +82,7 @@ class user_metrics {
     private static function compute_metrics(int $timerangedays): \stdClass {
         $result = new \stdClass();
         $result->totalusers = self::count_total_users();
-        $result->activeusers = self::count_recently_active_users();
+        $result->activeusers = self::count_recently_active_users($timerangedays);
         $result->newusers = self::count_new_users($timerangedays);
         return $result;
     }
@@ -105,11 +107,20 @@ class user_metrics {
 
     /**
      * Counts non-deleted, locally managed, non-guest accounts with a
-     * lastaccess timestamp within the last 4 weeks.
+     * lastaccess timestamp within the given number of days.
      *
+     * Decision (SPEC section 3/11, revised 2026-07-29): "active users" was
+     * originally a fixed 4-week window, independent of the "new in period"
+     * setting (see SPEC v2-backlog "Aktiv-Schwelle"). That independent
+     * threshold was explicitly rejected in favour of reusing the single
+     * existing local_admincockpit/timerangedays setting for both metrics,
+     * rather than adding a second configurable value - one shared period is
+     * simpler for admins to reason about than two.
+     *
+     * @param int $timerangedays
      * @return int
      */
-    private static function count_recently_active_users(): int {
+    private static function count_recently_active_users(int $timerangedays): int {
         global $DB, $CFG;
 
         return $DB->count_records_select(
@@ -118,7 +129,7 @@ class user_metrics {
             [
                 'guestid' => $CFG->siteguest,
                 'mnethostid' => $CFG->mnet_localhost_id,
-                'since' => time() - (4 * WEEKSECS),
+                'since' => time() - ($timerangedays * DAYSECS),
             ]
         );
     }

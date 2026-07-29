@@ -37,6 +37,6 @@ $timerangedays = (int) (get_config('local_admincockpit', 'timerangedays') ?: 180
 
 $result = user_metrics::get_metrics($timerangedays);
 
-echo "== user_metrics (timerangedays = {$timerangedays}) ==" . PHP_EOL;
+echo "== user_metrics (timerangedays = {$timerangedays}, applies to both activeusers and newusers) ==" . PHP_EOL;
 var_export($result);
 echo PHP_EOL;

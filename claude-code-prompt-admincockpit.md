@@ -10,7 +10,7 @@ Vor Schritt 1: `SPEC-admincockpit.md` in dasselbe Verzeichnis wie `CLAUDE.md` le
 
 PHPUnit-Testdateien werden trotzdem geschrieben (laufen nur nicht lokal, sondern über CI) – nicht weglassen.
 
-**Fortschritt:** Schritt 0 bis 8 sowie 9 und 10 sind umgesetzt (siehe Release 1.0.0 und 1.1.0). Offen: Schritt 7h (Navigation konfigurierbar machen), 11 (Plugin-Directory-Voraussetzungen), 12 (Abschluss-Review).
+**Fortschritt:** Schritt 0 bis 12 sind umgesetzt und released (siehe Release 1.0.0/1.1.0/1.1.1/2.0.0). Schritt 13 (Fix "davon aktiv" folgt Zeitraum) ist umgesetzt, 2026-07-29 - siehe CLAUDE.md für laufenden Stand statt dieser Zeile fix zu halten.
 
 ---
 
@@ -594,6 +594,55 @@ Bestandteile:
    gezielt gegenlesen kann, bevor das Plugin in Produktion geht
 4. Erstelle KEINEN Runbook-/Doku-Eintrag automatisch – das mache ich separat, sobald
    das Plugin final getestet ist
+```
+
+---
+
+## Schritt 13 – Fix: "davon aktiv" (global + pro Schule) folgt dem Zeitraum statt fixer 4 Wochen ✅ erledigt
+
+```
+Bisher waren die Kennzahlen "davon aktiv" (global, user_metrics::count_recently_active_users())
+und "Aktive Mitglieder" (pro Schule, school_metrics::count_active_members()) unabhängig vom
+Setting local_admincockpit/timerangedays fest auf die letzten 4 Wochen codiert, während
+"Neue Nutzer im Zeitraum"/"Neuzugänge im Zeitraum" den konfigurierten/gewählten Zeitraum
+nutzen - eine Inkonsistenz zwischen jeweils zwei nebeneinander angezeigten Kennzahlen.
+
+Entscheidung (2026-07-29): kein separates "Aktiv-Schwelle"-Setting (SPEC §11 hatte das als
+v2-Kandidat vorgesehen, wurde aber explizit verworfen) - beide "aktiv"-Kennzahlen nutzen
+stattdessen denselben local_admincockpit/timerangedays-Wert wie die jeweilige "neu"-Kennzahl.
+Ein gemeinsamer Zeitraum ist einfacher zu verstehen als zwei getrennte Werte. Ursprünglich
+(erste Umsetzung dieses Schritts) nur für die globale Kennzahl gemacht, dann nachträglich
+auf "Aktive Mitglieder" pro Schule erweitert, nach demselben Muster.
+
+1. classes/metrics/user_metrics.php: count_recently_active_users() bekommt den Parameter
+   int $timerangedays statt der fixen 4 * WEEKSECS-Berechnung; compute_metrics() reicht den
+   bereits vorhandenen $timerangedays-Parameter durch.
+2. classes/metrics/school_metrics.php: count_active_members() bekommt ebenfalls den
+   Parameter int $timerangedays statt der fixen 4 * WEEKSECS-Berechnung; compute_metrics()
+   reicht den bereits vorhandenen $timerangedays-Parameter durch.
+3. lang/en/ und lang/de/: KEIN neuer Setting-Label-String - nur der bestehende Hilfetext
+   von timerangedays_desc wird ergänzt, dass er jetzt auch "aktive Nutzer" (und implizit
+   "Aktive Mitglieder") steuert.
+4. tests/metrics/user_metrics_test.php und tests/metrics/school_metrics_test.php: bestehende
+   Tests für "davon aktiv"/"Aktive Mitglieder" so anpassen, dass sie mit einem engen
+   Zeitraum (z.B. 30 Tage) arbeiten statt mit den bisherigen festen 4-Wochen-Fixturen, plus
+   je einen zusätzlichen Test, der belegt, dass ein weiterer Zeitraum (z.B. 90 Tage) einen
+   Account/ein Mitglied korrekt mit einschliesst, der/das bei 30 Tagen noch ausgeschlossen
+   war.
+5. cli/verify_user_metrics.php und cli/verify_school_metrics.php: Ausgabezeile anpassen,
+   damit ersichtlich ist, dass timerangedays jetzt für activeusers/activemembers UND
+   newusers/newmembers gilt.
+6. SPEC-admincockpit.md: §3 ("davon aktiv", "Aktive Mitglieder") und §11 (Aktiv-Schwelle als
+   verworfen markieren, nicht löschen) entsprechend nachziehen.
+
+Kein Cache-Key-Fix nötig (siehe Schritt 7d/7g) - die Cache-Keys von user_metrics und
+school_metrics enthalten $timerangedays bereits vollständig, keine Änderung an caches.php
+erforderlich.
+
+Verifiziert: vendor/bin/phpunit --testsuite local_admincockpit_testsuite im Container,
+38/38 Tests grün nach Neuinitialisierung (php public/admin/tool/phpunit/cli/init.php war
+nötig, da phpunit/phpunit als Composer-Dev-Dependency zuvor nicht installiert war -
+composer install im Container nachgeholt).
 ```
 
 ---

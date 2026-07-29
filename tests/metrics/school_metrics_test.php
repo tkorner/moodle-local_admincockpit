@@ -78,18 +78,21 @@ final class school_metrics_test extends \advanced_testcase {
     }
 
     /**
-     * Only members whose user account has lastaccess within the last 4
-     * weeks count as active.
+     * Only members whose user account has lastaccess within the configured
+     * time range count as active. "Active" shares the same $timerangedays as
+     * "new" (see docblock in school_metrics::count_active_members(), revised
+     * 2026-07-29) - this test uses a narrow 30-day range to prove the window
+     * is actually driven by the parameter, not a hardcoded 4 weeks.
      *
      * @covers \local_admincockpit\metrics\school_metrics::get_metrics
      * @return void
      */
-    public function test_active_members_counts_lastaccess_within_4_weeks(): void {
+    public function test_active_members_counts_lastaccess_within_configured_period(): void {
         $this->resetAfterTest(true);
 
         $cohort = $this->getDataGenerator()->create_cohort();
         $activemember = $this->getDataGenerator()->create_user(['lastaccess' => time() - DAYSECS]);
-        $staleuser = $this->getDataGenerator()->create_user(['lastaccess' => time() - (5 * WEEKSECS)]);
+        $staleuser = $this->getDataGenerator()->create_user(['lastaccess' => time() - (45 * DAYSECS)]);
         $nevermember = $this->getDataGenerator()->create_user(['lastaccess' => 0]);
 
         cohort_add_member($cohort->id, $activemember->id);
@@ -98,9 +101,32 @@ final class school_metrics_test extends \advanced_testcase {
 
         $category = $this->getDataGenerator()->create_category();
 
-        $result = school_metrics::get_metrics($cohort->id, $category->id, 90);
+        $result = school_metrics::get_metrics($cohort->id, $category->id, 30);
 
         $this->assertSame(1, $result->activemembers);
+    }
+
+    /**
+     * Widening the period must pick up a member that falls outside the
+     * narrower window - proves activemembers reacts to $timerangedays
+     * instead of being pinned to a fixed 4-week constant.
+     *
+     * @covers \local_admincockpit\metrics\school_metrics::get_metrics
+     * @return void
+     */
+    public function test_active_members_reacts_to_wider_period(): void {
+        $this->resetAfterTest(true);
+
+        $cohort = $this->getDataGenerator()->create_cohort();
+        $member = $this->getDataGenerator()->create_user(['lastaccess' => time() - (45 * DAYSECS)]);
+        cohort_add_member($cohort->id, $member->id);
+
+        $category = $this->getDataGenerator()->create_category();
+
+        $narrow = school_metrics::get_metrics($cohort->id, $category->id, 30);
+        $wide = school_metrics::get_metrics($cohort->id, $category->id, 90);
+
+        $this->assertSame($narrow->activemembers + 1, $wide->activemembers);
     }
 
     /**

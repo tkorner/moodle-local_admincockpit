@@ -100,4 +100,4 @@ $string['tile_totalusers'] = 'Total users';
 $string['timerange_label'] = 'Time range:';
 $string['timerange_submit'] = 'Update';
 $string['timerangedays'] = 'Time range for "new in period" counts';
-$string['timerangedays_desc'] = 'Used by the dashboard to determine which users, cohort members, and courses count as "new". Can be temporarily overridden on the dashboard page itself without changing this default.';
+$string['timerangedays_desc'] = 'Used by the dashboard to determine which users, cohort members, and courses count as "new", and which users count as "active" (a single shared period for both metrics, no separate setting). Can be temporarily overridden on the dashboard page itself without changing this default.';

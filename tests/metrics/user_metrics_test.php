@@ -88,25 +88,51 @@ final class user_metrics_test extends \advanced_testcase {
     }
 
     /**
-     * Only accounts with lastaccess in the last 4 weeks count as active;
-     * never-logged-in (lastaccess = 0) and stale accounts do not.
+     * Only accounts with lastaccess within the configured time range count
+     * as active; never-logged-in (lastaccess = 0) and stale accounts do not.
+     * "Active" shares the same $timerangedays as "new" (see docblock in
+     * user_metrics::count_recently_active_users(), revised 2026-07-29) -
+     * this test uses a narrow 30-day range to prove the window is actually
+     * driven by the parameter, not a hardcoded 4 weeks.
      *
      * @covers \local_admincockpit\metrics\user_metrics::get_metrics
      * @return void
      */
-    public function test_active_users_counts_lastaccess_within_4_weeks(): void {
+    public function test_active_users_counts_lastaccess_within_configured_period(): void {
         $this->resetAfterTest(true);
 
-        $before = $this->baseline();
+        $before = user_metrics::get_metrics(30);
 
         $this->getDataGenerator()->create_user(['lastaccess' => time() - DAYSECS]);
-        $this->getDataGenerator()->create_user(['lastaccess' => time() - (5 * WEEKSECS)]);
+        $this->getDataGenerator()->create_user(['lastaccess' => time() - (45 * DAYSECS)]);
         $this->getDataGenerator()->create_user(['lastaccess' => 0]);
 
         $this->purge_cache();
-        $after = user_metrics::get_metrics(90);
+        $after = user_metrics::get_metrics(30);
 
         $this->assertSame($before->activeusers + 1, $after->activeusers);
+    }
+
+    /**
+     * Widening the period must pick up an account that falls outside the
+     * narrower window - proves activeusers reacts to $timerangedays instead
+     * of being pinned to a fixed 4-week constant.
+     *
+     * @covers \local_admincockpit\metrics\user_metrics::get_metrics
+     * @return void
+     */
+    public function test_active_users_reacts_to_wider_period(): void {
+        $this->resetAfterTest(true);
+
+        $this->getDataGenerator()->create_user(['lastaccess' => time() - (45 * DAYSECS)]);
+
+        $this->purge_cache();
+        $narrow = user_metrics::get_metrics(30);
+
+        $this->purge_cache();
+        $wide = user_metrics::get_metrics(90);
+
+        $this->assertSame($narrow->activeusers + 1, $wide->activeusers);
     }
 
     /**

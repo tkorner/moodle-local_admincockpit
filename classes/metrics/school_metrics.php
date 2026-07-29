@@ -81,7 +81,7 @@ class school_metrics {
         $result = new \stdClass();
         $result->membercount = self::count_members($cohortid);
         $result->newmembers = self::count_new_members($cohortid, $timerangedays);
-        $result->activemembers = self::count_active_members($cohortid);
+        $result->activemembers = self::count_active_members($cohortid, $timerangedays);
         $result->coursecount = self::count_courses($categoryid);
         $result->newcourses = self::count_new_courses($categoryid, $timerangedays);
         return $result;
@@ -121,12 +121,20 @@ class school_metrics {
 
     /**
      * Counts cohort members whose user account has a lastaccess timestamp
-     * within the last 4 weeks.
+     * within the given number of days.
+     *
+     * Decision (SPEC section 3/11, revised 2026-07-29): "active members" was
+     * originally a fixed 4-week window, independent of the "new in period"
+     * setting (see SPEC v2-backlog "Aktiv-Schwelle", same decision as for the
+     * global "active users" metric in user_metrics.php). That independent
+     * threshold was explicitly rejected in favour of reusing the single
+     * existing local_admincockpit/timerangedays setting for both metrics.
      *
      * @param int $cohortid
+     * @param int $timerangedays
      * @return int
      */
-    private static function count_active_members(int $cohortid): int {
+    private static function count_active_members(int $cohortid, int $timerangedays): int {
         global $DB;
 
         $sql = "SELECT COUNT(*)
@@ -138,7 +146,7 @@ class school_metrics {
 
         return $DB->count_records_sql($sql, [
             'cohortid' => $cohortid,
-            'since' => time() - (4 * WEEKSECS),
+            'since' => time() - ($timerangedays * DAYSECS),
         ]);
     }
 

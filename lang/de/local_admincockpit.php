@@ -96,4 +96,4 @@ $string['tile_totalusers'] = 'Nutzer gesamt';
 $string['timerange_label'] = 'Zeitraum:';
 $string['timerange_submit'] = 'Anzeigen';
 $string['timerangedays'] = 'Zeitraum für Neu-Zählungen';
-$string['timerangedays_desc'] = 'Bestimmt, welche Nutzer, Kohorten-Mitglieder und Kurse auf dem Dashboard als "neu" gelten. Kann auf der Dashboard-Seite selbst temporär überschrieben werden, ohne diesen Standardwert zu ändern.';
+$string['timerangedays_desc'] = 'Bestimmt, welche Nutzer, Kohorten-Mitglieder und Kurse auf dem Dashboard als "neu" gelten, sowie welche als "aktiv" zählen (gemeinsamer Zeitraum für beide Kennzahlen, kein separates Setting). Kann auf der Dashboard-Seite selbst temporär überschrieben werden, ohne diesen Standardwert zu ändern.';

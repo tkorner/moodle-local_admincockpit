@@ -46,7 +46,8 @@ if (empty($matches->matched)) {
 
 foreach ($matches->matched as $idnumber => $school) {
     echo "== {$idnumber} (cohortid={$school->cohortid}, categoryid={$school->categoryid}, "
-        . "timerangedays={$timerangedays}) ==" . PHP_EOL;
+        . "timerangedays={$timerangedays}, applies to activemembers, newmembers and "
+        . "newcourses) ==" . PHP_EOL;
     var_export(school_metrics::get_metrics($school->cohortid, $school->categoryid, $timerangedays));
     echo PHP_EOL;
 }
