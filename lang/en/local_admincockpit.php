@@ -25,6 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['activeschools'] = 'Active {$a} codes';
+$string['allcachespurged'] = 'All site caches cleared (class map, theme, strings, and more) - not just this plugin\'s own cached numbers.';
 $string['activeschools_desc'] = 'Only fully matched codes (cohort and top-level category share the same idnumber) can be selected here. They are shown on the dashboard.';
 $string['activeschools_option'] = '{$a->idnumber} ({$a->cohortname} / {$a->categoryname})';
 $string['activeusers'] = 'Active';
@@ -44,6 +45,9 @@ $string['duplicateemails_truncated'] = 'Showing the first 500 of {$a} duplicate-
 $string['eventdashboardviewed'] = 'Viewed admin cockpit';
 $string['groupinglabel'] = 'Grouping label';
 $string['groupinglabel_desc'] = 'What to call a "grouping" (a cohort and a top-level category sharing the same idnumber) in the dashboard UI - e.g. School, Site, Department, or Faculty. Purely cosmetic: it only changes wording, never how groupings are matched or selected.';
+$string['healthsignals'] = 'Health signal order / visibility';
+$string['healthsignals_available'] = 'Currently available health signals (component:key):';
+$string['healthsignals_desc'] = 'One entry per line, using the "component:key" identifiers listed above. A listed entry pins that signal\'s position (top to bottom); prefix with "-" to hide it entirely (e.g. "-local_admincockpit:security"). A signal never mentioned here stays enabled and is shown after the listed ones, in the order it was contributed - so leaving this empty keeps every currently available signal visible, and any newly installed third-party signal shows up automatically without editing this setting.';
 $string['lastcomputed'] = 'As of: {$a}, updates daily.';
 $string['mergeusershint'] = 'This list is a starting point for identifying accounts to merge. The '
     . '"Merge user accounts" admin tool (tool_mergeusers) is not installed on this instance, so no direct '
@@ -71,6 +75,7 @@ $string['onesided_none'] = 'All cohorts and top-level categories with an idnumbe
 $string['onesidedwarning'] = 'One-sided matches';
 $string['pluginname'] = 'Admin Cockpit';
 $string['privacy:metadata'] = 'The Admin Cockpit plugin does not store any personal data. All numbers shown are computed on request from existing Moodle core data (users, cohorts, courses, task logs) and are never written anywhere by this plugin.';
+$string['purgeallcaches'] = 'Purge ALL site caches';
 $string['purgecache'] = 'Refresh now';
 $string['schoolcard_coursemanagement'] = 'Course management';
 $string['schooltile_activemembers'] = 'Active members';
@@ -101,3 +106,9 @@ $string['timerange_label'] = 'Time range:';
 $string['timerange_submit'] = 'Update';
 $string['timerangedays'] = 'Time range for "new in period" counts';
 $string['timerangedays_desc'] = 'Used by the dashboard to determine which users, cohort members, and courses count as "new", and which users count as "active" (a single shared period for both metrics, no separate setting). Can be temporarily overridden on the dashboard page itself without changing this default.';
+$string['unpublishedcoursedays'] = 'Unpublished-course age threshold';
+$string['unpublishedcoursedays_desc'] = 'A hidden course only counts as the "unpublished courses" health signal once it was created at least this long ago. A course hidden while still being prepared is normal, not a problem - this threshold is what tells the two apart.';
+$string['unpublishedcourses'] = 'Unpublished courses';
+$string['unpublishedcourses_intro'] = 'Courses hidden from students for at least {$a} days - a shorter time is normal while a course is still being prepared, so those are not shown here.';
+$string['unpublishedcourses_none'] = 'No long-hidden courses found - nothing to report here.';
+$string['unpublishedcourses_truncated'] = 'Showing the first 500 of {$a} long-hidden courses.';

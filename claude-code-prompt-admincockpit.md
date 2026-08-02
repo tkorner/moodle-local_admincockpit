@@ -10,7 +10,7 @@ Before step 1: place `SPEC-admincockpit.md` in the same directory as `CLAUDE.md`
 
 PHPUnit test files are still written despite this (they just don't run locally, only via CI) – don't skip them.
 
-**Progress:** Steps 0 through 8 as well as 9 and 10 are implemented (see release 1.0.0 and 1.1.0). Open: step 7h (make navigation configurable), 11 (plugin-directory prerequisites), 12 (final review). Steps 0 through 13 are now implemented and released (see "Progress" in CLAUDE.md for the current, authoritative state instead of this line, which is no longer kept perfectly in sync).
+**Progress:** Steps 0 through 8 as well as 9 and 10 are implemented (see release 1.0.0 and 1.1.0). Open: step 7h (make navigation configurable), 11 (plugin-directory prerequisites), 12 (final review). Steps 0 through 20 are now implemented and released (see "Progress" in CLAUDE.md for the current, authoritative state instead of this line, which is no longer kept perfectly in sync).
 
 ---
 
@@ -645,6 +645,182 @@ Verified: vendor/bin/phpunit --testsuite local_admincockpit_testsuite in the
 container, 38/38 tests green after re-initialization (php public/admin/tool/phpunit/cli/init.php
 was needed, since phpunit/phpunit as a Composer dev dependency wasn't installed
 beforehand - composer install caught up on this in the container).
+```
+
+---
+
+## Step 14 – Health signal DTO ✅ done
+
+```
+Implement classes/health_signal.php (namespace local_admincockpit), a small
+immutable value object representing one health signal tile, independent of
+how it's computed or by whom:
+
+- component (string): frankenstyle component of whoever produced this signal,
+  e.g. 'local_admincockpit' for the built-in ones
+- key (string): stable identifier unique within that component, e.g.
+  'duplicateemails', 'cron' - together with component this is the identity
+  used later (step 17) for the enable/disable/ordering setting
+- label (string): already-translated display label
+- value (int|string): the tile's displayed value
+- severity (string): 'ok'|'warning'|'error'
+- url (string): site-relative or absolute click-target
+- valuetitle (string, optional, default ''): tooltip/title attribute
+- helpicon (string, optional, default ''): pre-rendered help icon HTML
+
+Constructor-only, readonly properties, no setters. Add a PHPUnit test
+(tests/health_signal_test.php) covering construction and defaults for the
+optional parameters. No behavior change to the dashboard yet - this is a
+pure data-object addition.
+```
+
+---
+
+## Step 15 – Research: core Hooks API interface (mandatory, verify before coding) ✅ done
+
+```
+Before implementing the hook itself: verify against the actual Moodle 5.2
+core source (lib/classes/hook/described_hook.php and the Hooks API guide),
+not from memory/training data, what the exact described_hook interface
+requires (method signatures for the self-description methods), how
+db/hooks.php registration entries are structured (hook class => callback,
+optional priority), and how \core\hook\manager::get_instance()->dispatch()
+is invoked. Report back what you found, with file/line references, before
+writing any hook code. Same treatment as the four SPEC "mandatory research
+points" - don't guess this.
+```
+
+---
+
+## Step 16 – Health signals hook + own listener ✅ done
+
+```
+Based on the verified interface from step 15:
+
+1. classes/hook/health_signals.php: the hook class itself, implementing the
+   verified described_hook interface. Carries a private array of
+   local_admincockpit\health_signal instances, with add_signal(health_signal
+   $signal): void and get_signals(): array.
+
+2. db/hooks.php: register this plugin's own listener for its own hook (the
+   built-in signals become a hook consumer like any third party would be,
+   not a special case).
+
+3. classes/local/hook_listener.php (or similar - pick the namespace that best
+   fits existing conventions): one static callback method that wraps the four
+   existing classes/metrics/health_signals.php computations (unchanged) into
+   local_admincockpit\health_signal DTOs (component 'local_admincockpit', keys
+   'duplicateemails'/'courseswithoutenddate'/'security'/'cron') and calls
+   $hook->add_signal() for each. All severity/URL/label logic currently in
+   classes/output/dashboard_page.php's export_health_signals()/make_signal_tile()
+   moves here unchanged - this step is a refactor extracting existing logic
+   into the hook-listener shape, not new business logic.
+
+Do not touch dashboard_page.php's rendering yet (that's step 17) - at this
+point the hook exists and is populated, but isn't consumed.
+```
+
+---
+
+## Step 17 – Dashboard consumes the hook (+ exception isolation) ✅ done
+
+```
+1. Rework classes/output/dashboard_page.php::export_health_signals() to
+   dispatch the local_admincockpit\hook\health_signals hook and iterate
+   whatever health_signal DTOs come back, feeding each through
+   make_signal_tile() (which stays as the single place that knows about
+   badge markup/CSS classes), instead of the four hardcoded calls.
+
+2. Resilience: check what step 15's research found about whether core's hook
+   manager isolates exceptions between multiple registered callbacks for the
+   same hook. If it doesn't, wrap the dispatch (or each listener's
+   contribution) so a throwing third-party listener is logged via
+   debugging() and skipped, rather than 500ing the whole dashboard for every
+   admin. Decide the exact mechanism based on what's actually verified, not
+   assumed.
+
+3. Verify with the existing PHPUnit/Behat suite and cli/verify_health_signals.php
+   that dashboard output for the four built-in signals is unchanged (same
+   labels, values, severities, URLs as before this refactor).
+```
+
+---
+
+## Step 18 – Settings: enable/disable/order signal catalog ✅ done
+
+```
+Add a settings mechanism (Site administration > Plugins > Local plugins >
+Admin Cockpit) that lets the admin enable/disable and order ALL currently
+available health signals - both this plugin's own built-in ones and any
+third-party hook-contributed ones - by their component+key identity from
+step 14.
+
+1. Reuse the existing 'navitems' textarea-based ordering convention (see
+   step 7h) rather than inventing a new UI widget: an ordered,
+   newline-or-pipe-separated list of 'component:key' entries.
+
+2. The settings page discovers currently available signals by dispatching
+   the hook once at render time (same as the dashboard does), so newly
+   installed third-party signals - or newly added built-in ones from step 19 -
+   show up automatically.
+
+3. Default behavior for a signal not yet mentioned in the stored setting:
+   enabled, appended at the end - so upgrading to this step, or installing a
+   new signal-producing plugin later, doesn't silently hide anything the
+   admin never explicitly disabled.
+
+4. A stored entry referencing a component/key that's no longer available
+   (e.g. that plugin got uninstalled) is silently skipped at render time, same
+   tolerance pattern as the existing 'activeschools' setting already has for
+   stale codes - not an error.
+
+5. classes/output/dashboard_page.php::export_health_signals() filters/orders
+   the hook's returned DTOs against this setting before rendering.
+```
+
+---
+
+## Step 19 – Dogfood: first additional built-in signal via the same mechanism ✅ done
+
+```
+Implement ONE new optional, off-by-default-or-on (decide during
+implementation) built-in health signal, registered through the exact same
+hook_listener mechanism from step 16 - proving the extension point works
+for real, not just in theory, before documenting it for third parties.
+
+Candidate: "unpublished courses" - course.visible = 0 AND course.timecreated
+older than a configurable threshold (new setting, e.g.
+local_admincockpit/unpublishedcoursedays, default 90). Deliberately NOT a
+bare visibility check - a course hidden while still being prepared is normal,
+not a health problem; pairing with an age condition avoids the same
+false-positive trap already identified and avoided for the rejected
+"auth mismatch" signal (see SPEC §11).
+
+Add the query to classes/metrics/health_signals.php (new method, same class,
+same caching discipline as the other four), a hook_listener entry for it, a
+drill-down page (courseswithoutenddate.php is the template to follow), and
+PHPUnit test + cli/verify_ script, same as steps 5/6.
+```
+
+---
+
+## Step 20 – Document the extension point + release ✅ done
+
+```
+1. README.md: new section "Extending: add your own health signal" with the
+   minimal example (db/hooks.php entry + listener class + health_signal
+   construction), pointing out this requires no changes to
+   local_admincockpit itself and no coordination with its maintainer.
+
+2. SPEC-admincockpit.md §11: move "pluggable health signals via Hooks API"
+   and "unpublished courses" from backlog/idea into "implemented", with a
+   short note on why hooks were chosen over a raw-SQL settings field (already
+   rejected once for the arbitrary-SQL-widget idea, see §10) and over a
+   formal Moodle subplugin relationship (too tightly coupled for this case).
+
+3. Version bump + changelog entry per the usual "bump per feature" habit,
+   release notes explicitly calling out the new hook (discoverable by other
+   plugin authors browsing Marketplace/GitHub release notes).
 ```
 
 ---

@@ -136,6 +136,12 @@ final class dashboard_page_test extends \advanced_testcase {
      * in its own most severe (CRITICAL) bucket when lastcronstart was never
      * set (verified directly against that class's get_result()).
      *
+     * Looks up the tile by its severitylabel-independent identity (the last
+     * tile, since local_listener::add_builtin_signals() always adds cron
+     * last) rather than a hardcoded index, so this test doesn't silently
+     * break every time a new built-in signal is inserted before it (as
+     * happened once already when step 19 added "unpublished courses").
+     *
      * @covers \local_admincockpit\output\dashboard_page::export_for_template
      * @return void
      */
@@ -146,8 +152,33 @@ final class dashboard_page_test extends \advanced_testcase {
 
         $context = (new dashboard_page(180))->export_for_template($this->renderer());
 
-        $crontile = $context['healthsignals'][3];
+        $crontile = end($context['healthsignals']);
         $this->assertSame('danger', $crontile->severitybgclass);
+    }
+
+    /**
+     * The "Purge ALL site caches" quick action (a much more impactful
+     * operation than the plugin's own "Refresh now" button - it rebuilds the
+     * class-autoloader map, theme caches, string caches etc. across the
+     * whole instance) is only offered to users who actually have
+     * moodle/site:config, not merely local/admincockpit:view - same gate
+     * index.php enforces server-side via require_capability() before
+     * actually running purge_all_caches().
+     *
+     * @covers \local_admincockpit\output\dashboard_page::export_for_template
+     * @return void
+     */
+    public function test_export_for_template_site_wide_purge_gated_by_capability(): void {
+        $this->resetAfterTest(true);
+
+        $this->setAdminUser();
+        $context = (new dashboard_page(180))->export_for_template($this->renderer());
+        $this->assertTrue($context['cansitewidepurge']);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $context = (new dashboard_page(180))->export_for_template($this->renderer());
+        $this->assertFalse($context['cansitewidepurge']);
     }
 
     /**

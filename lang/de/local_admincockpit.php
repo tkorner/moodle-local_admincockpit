@@ -25,6 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['activeschools'] = 'Aktive {$a}-Kürzel';
+$string['allcachespurged'] = 'Alle Site-Caches geleert (Klassen-Map, Theme, Sprachstrings und mehr) - nicht nur die eigenen zwischengespeicherten Zahlen dieses Plugins.';
 $string['activeschools_desc'] = 'Nur vollständig gepaarte Kürzel (Kohorte und Top-Level-Kategorie mit identischer idnumber) stehen hier zur Auswahl. Sie werden auf dem Dashboard angezeigt.';
 $string['activeschools_option'] = '{$a->idnumber} ({$a->cohortname} / {$a->categoryname})';
 $string['activeusers'] = 'Aktiv';
@@ -43,6 +44,9 @@ $string['duplicateemails_truncated'] = 'Zeigt die ersten 500 von {$a} Gruppen do
 $string['eventdashboardviewed'] = 'Admin-Cockpit angesehen';
 $string['groupinglabel'] = 'Bezeichnung der Gruppierung';
 $string['groupinglabel_desc'] = 'Wie eine "Gruppierung" (eine Kohorte und eine Top-Level-Kategorie mit identischer idnumber) im Dashboard genannt werden soll - z.B. Schule, Standort, Abteilung oder Fakultät. Rein kosmetisch: ändert nur die Formulierung, nie die Zuordnungslogik oder Auswahl.';
+$string['healthsignals'] = 'Reihenfolge / Sichtbarkeit der Health-Signale';
+$string['healthsignals_available'] = 'Aktuell verfügbare Health-Signale (component:key):';
+$string['healthsignals_desc'] = 'Ein Eintrag pro Zeile, mit den oben aufgeführten "component:key"-Kennungen. Ein aufgeführter Eintrag legt die Position dieses Signals fest (von oben nach unten); mit "-" davor wird es komplett ausgeblendet (z.B. "-local_admincockpit:security"). Ein hier nicht erwähntes Signal bleibt aktiv und wird nach den aufgeführten angezeigt, in der Reihenfolge, in der es beigetragen wurde - leer lassen zeigt also weiterhin jedes aktuell verfügbare Signal, und ein neu installiertes Drittanbieter-Signal erscheint automatisch, ohne diese Einstellung anzupassen.';
 $string['lastcomputed'] = 'Stand: {$a}, wird täglich aktualisiert.';
 $string['mergeusershint'] = 'Diese Liste ist ein Ausgangspunkt, um zusammenzuführende Konten zu identifizieren. '
     . 'Das Admin-Tool "Merge user accounts" (tool_mergeusers) ist auf dieser Instanz nicht installiert, daher '
@@ -69,6 +73,7 @@ $string['onesided_none'] = 'Alle Kohorten und Top-Level-Kategorien mit idnumber 
 $string['onesidedwarning'] = 'Einseitige Zuordnungen';
 $string['pluginname'] = 'Admin Cockpit';
 $string['privacy:metadata'] = 'Das Admin-Cockpit-Plugin speichert keine personenbezogenen Daten. Alle angezeigten Zahlen werden bei Aufruf aus bestehenden Moodle-Core-Daten (Nutzer, Kohorten, Kurse, Task-Logs) berechnet und von diesem Plugin nirgendwo geschrieben.';
+$string['purgeallcaches'] = 'ALLE Site-Caches leeren';
 $string['purgecache'] = 'Jetzt aktualisieren';
 $string['schoolcard_coursemanagement'] = 'Kursverwaltung';
 $string['schooltile_activemembers'] = 'Aktive Mitglieder';
@@ -97,3 +102,9 @@ $string['timerange_label'] = 'Zeitraum:';
 $string['timerange_submit'] = 'Anzeigen';
 $string['timerangedays'] = 'Zeitraum für Neu-Zählungen';
 $string['timerangedays_desc'] = 'Bestimmt, welche Nutzer, Kohorten-Mitglieder und Kurse auf dem Dashboard als "neu" gelten, sowie welche als "aktiv" zählen (gemeinsamer Zeitraum für beide Kennzahlen, kein separates Setting). Kann auf der Dashboard-Seite selbst temporär überschrieben werden, ohne diesen Standardwert zu ändern.';
+$string['unpublishedcoursedays'] = 'Alters-Schwelle für unveröffentlichte Kurse';
+$string['unpublishedcoursedays_desc'] = 'Ein versteckter Kurs zählt erst dann zum Health-Signal "Unveröffentlichte Kurse", wenn er mindestens so lange her erstellt wurde. Ein Kurs, der während der Vorbereitung versteckt ist, ist normal, kein Problem - diese Schwelle unterscheidet die beiden Fälle.';
+$string['unpublishedcourses'] = 'Unveröffentlichte Kurse';
+$string['unpublishedcourses_intro'] = 'Kurse, die seit mindestens {$a} Tagen für Teilnehmende versteckt sind - eine kürzere Zeit ist normal, während ein Kurs noch vorbereitet wird, solche werden hier nicht angezeigt.';
+$string['unpublishedcourses_none'] = 'Keine lange versteckten Kurse gefunden - hier gibt es nichts zu melden.';
+$string['unpublishedcourses_truncated'] = 'Zeigt die ersten 500 von {$a} lange versteckten Kursen.';

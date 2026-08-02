@@ -79,6 +79,19 @@ if ($hassiteconfig) {
             ]
         ));
 
+        $settings->add(new admin_setting_configselect(
+            'local_admincockpit/unpublishedcoursedays',
+            get_string('unpublishedcoursedays', 'local_admincockpit'),
+            get_string('unpublishedcoursedays_desc', 'local_admincockpit'),
+            90,
+            [
+                30 => get_string('numdays', 'core', 30),
+                90 => get_string('numdays', 'core', 90),
+                180 => get_string('numdays', 'core', 180),
+                360 => get_string('numdays', 'core', 360),
+            ]
+        ));
+
         $matches = \local_admincockpit\school_matcher::get_matches();
 
         $schoolchoices = [];
@@ -153,6 +166,34 @@ if ($hassiteconfig) {
             get_string('navitems', 'local_admincockpit'),
             get_string('navitems_desc', 'local_admincockpit'),
             \local_admincockpit\navitems_parser::default_value(),
+            PARAM_RAW
+        ));
+
+        // Discovers currently available health signals (this plugin's own four built-in ones,
+        // plus any third-party contributions - see classes/hook/health_signals.php, step 16) so the
+        // admin knows which 'component:key' refs to use below, without having to read source code.
+        $healthsignalshook = new \local_admincockpit\hook\health_signals();
+        \core\hook\manager::get_instance()->dispatch($healthsignalshook);
+        $availablerefs = array_map(
+            [\local_admincockpit\health_signal_ordering::class, 'ref'],
+            $healthsignalshook->get_signals()
+        );
+
+        $settings->add(new admin_setting_description(
+            'local_admincockpit/healthsignals_available',
+            '',
+            get_string('healthsignals_available', 'local_admincockpit')
+                . \core\output\html_writer::alist($availablerefs)
+        ));
+
+        // Empty by default: every currently contributed signal stays enabled, in hook-dispatch
+        // order - identical to today's behaviour for existing installations, see
+        // health_signal_ordering::apply().
+        $settings->add(new admin_setting_configtextarea(
+            'local_admincockpit/healthsignals',
+            get_string('healthsignals', 'local_admincockpit'),
+            get_string('healthsignals_desc', 'local_admincockpit'),
+            '',
             PARAM_RAW
         ));
     }

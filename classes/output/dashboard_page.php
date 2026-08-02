@@ -29,9 +29,10 @@
 
 namespace local_admincockpit\output;
 
+use local_admincockpit\health_signal_ordering;
 use local_admincockpit\navitems_parser;
 use local_admincockpit\school_matcher;
-use local_admincockpit\metrics\health_signals;
+use local_admincockpit\hook\health_signals as health_signals_hook;
 use local_admincockpit\metrics\school_metrics;
 use local_admincockpit\metrics\user_metrics;
 
@@ -74,6 +75,7 @@ class dashboard_page implements \core\output\renderable, \core\output\templatabl
             'settingsurl' => (new \core\url('/admin/settings.php', ['section' => 'local_admincockpit_settings']))->out(false),
             'lastcomputedtext' => $this->export_lastcomputedtext(),
             'sesskey' => sesskey(),
+            'cansitewidepurge' => has_capability('moodle/site:config', \core\context\system::instance()),
             'healthsignals' => $this->export_health_signals($output),
             'navgroups' => $navgroups,
             'nonavitemsconfigured' => empty($navgroups),
@@ -246,47 +248,59 @@ class dashboard_page implements \core\output\renderable, \core\output\templatabl
     }
 
     /**
-     * Builds the four health signal tiles.
+     * Builds the health signal tiles by dispatching the health_signals hook
+     * (step 16/17) and rendering whatever health_signal DTOs come back -
+     * this plugin's own four built-in signals (classes/hook/local_listener.php)
+     * plus any third-party contributions, in listener-registration order.
+     *
+     * Exception handling: verified in step 15 against Moodle 5.2 core source
+     * (lib/classes/hook/manager.php) that \core\hook\manager::dispatch() does
+     * NOT isolate exceptions between callbacks - a throwing listener aborts
+     * the dispatch loop entirely. Since this hook, unlike most core hooks,
+     * is meant to accept contributions from untrusted third-party plugins on
+     * a shared admin page, dispatch() is wrapped here so one broken listener
+     * degrades to "its signal and any later listener's are missing for this
+     * request" rather than 500ing the whole dashboard for every admin.
+     * Listeners that already ran and called add_signal() before the failure
+     * keep their contribution, since the hook's mutable state was already
+     * updated by that point - only listeners not yet reached are skipped.
+     *
+     * After dispatch, the 'healthsignals' setting (step 18) is applied to
+     * filter/reorder the contributed signals - see health_signal_ordering.
      *
      * @param \core\output\renderer_base $output
      * @return array of stdClass, see make_signal_tile()
      */
     private function export_health_signals(\core\output\renderer_base $output): array {
-        $duplicates = health_signals::duplicate_emails();
-        $noenddate = health_signals::courses_without_enddate();
-        $security = health_signals::security_overview_summary();
-        $cron = health_signals::cron_status();
+        $hook = new health_signals_hook();
 
-        return [
-            $this->make_signal_tile(
-                get_string('duplicateemails', 'local_admincockpit'),
-                $duplicates->count,
-                '/local/admincockpit/duplicateemails.php',
-                $duplicates->count > 0 ? 'warning' : 'ok'
-            ),
-            $this->make_signal_tile(
-                get_string('courseswithoutenddate', 'local_admincockpit'),
-                $noenddate->count,
-                '/local/admincockpit/courseswithoutenddate.php',
-                $noenddate->count > 0 ? 'warning' : 'ok'
-            ),
-            $this->make_signal_tile(
-                get_string('signal_security', 'local_admincockpit'),
-                $this->format_security_value($security),
-                '/report/security/index.php',
-                $security->error > 0 ? 'error' : ($security->warning > 0 ? 'warning' : 'ok'),
-                '',
-                $output->help_icon('signal_security', 'local_admincockpit')
-            ),
-            $this->make_signal_tile(
-                get_string('signal_cron', 'local_admincockpit'),
-                $this->format_cron_value($cron),
-                '/admin/tool/task/scheduledtasks.php',
-                $this->cron_severity($cron),
-                $cron->lastrunat > 0 ? userdate($cron->lastrunat) : '',
-                $output->help_icon('signal_cron', 'local_admincockpit')
-            ),
-        ];
+        try {
+            \core\hook\manager::get_instance()->dispatch($hook);
+        } catch (\Throwable $e) {
+            debugging(
+                'local_admincockpit: a health_signals hook listener threw an exception, '
+                    . 'some health signal tiles may be missing: ' . $e->getMessage(),
+                DEBUG_DEVELOPER
+            );
+        }
+
+        $ordered = health_signal_ordering::apply(
+            $hook->get_signals(),
+            (string) get_config('local_admincockpit', 'healthsignals')
+        );
+
+        $tiles = [];
+        foreach ($ordered as $signal) {
+            $tiles[] = $this->make_signal_tile(
+                $signal->label,
+                $signal->value,
+                $signal->url,
+                $signal->severity,
+                $signal->valuetitle,
+                $signal->helpicon
+            );
+        }
+        return $tiles;
     }
 
     /**
@@ -360,82 +374,6 @@ class dashboard_page implements \core\output\renderable, \core\output\templatabl
             'severityiconclass' => $map['icon'],
             'severitylabel' => get_string($map['labelkey'], 'core'),
         ];
-    }
-
-    /**
-     * Formats the security overview health signal's display value as a
-     * single compact line, e.g. "15 OK · 4 Warnungen" - error is only
-     * shown when non-zero (0 errors is the expected, unremarkable case);
-     * ok and warning are always shown since either could legitimately be 0.
-     *
-     * @param \stdClass $security as returned by
-     *        health_signals::security_overview_summary()
-     * @return string
-     */
-    private function format_security_value(\stdClass $security): string {
-        $parts = [
-            get_string('signal_security_ok', 'local_admincockpit', $security->ok),
-            get_string('signal_security_warning', 'local_admincockpit', $security->warning),
-        ];
-        if ($security->error > 0) {
-            $parts[] = get_string('signal_security_error', 'local_admincockpit', $security->error);
-        }
-
-        return implode(' · ', $parts);
-    }
-
-    /**
-     * Formats the cron health signal's display value.
-     *
-     * The "last run" part uses the same format_time(time() - $timestamp)
-     * idiom core itself uses for relative timestamps (see
-     * admin/classes/reportbuilder/local/systemreports/users.php's lastaccess
-     * column), e.g. "2 hours 15 mins", rather than a full date/time - the
-     * full timestamp is still available via the tile's title attribute
-     * (see export_health_signals()).
-     *
-     * @param \stdClass $cron as returned by health_signals::cron_status()
-     * @return string
-     */
-    private function format_cron_value(\stdClass $cron): string {
-        $lastrun = $cron->lastrunat > 0
-            ? get_string('signal_cron_lastrun', 'local_admincockpit', format_time(time() - $cron->lastrunat))
-            : get_string('signal_cron_neverrun', 'local_admincockpit');
-
-        return $lastrun . ' ' . get_string('signal_cron_failedtasks', 'local_admincockpit', $cron->failedtasks24h);
-    }
-
-    /**
-     * Decides the cron tile's severity.
-     *
-     * Own heuristic (not a reuse of \tool_task\check\cronrunning's verdict,
-     * which is a separate report page one click away), but aligned with it
-     * on one point: any recent failure, or cron never having run even once,
-     * is an error - cronrunning's own get_result() computes its delta as
-     * time() - get_config('tool_task', 'lastcronstart'), and an unset config
-     * (never run) makes that delta huge enough to always exceed its own
-     * DAYSECS threshold, i.e. core's most severe (CRITICAL) state. Merely
-     * being overdue by more than $CFG->expectedcronfrequency (the same
-     * config core's own check reads) having run before is a lower-severity
-     * warning - a transient blip is not the same problem as cron.php never
-     * having been set up at all.
-     *
-     * @param \stdClass $cron as returned by health_signals::cron_status()
-     * @return string 'ok', 'warning', or 'error'
-     */
-    private function cron_severity(\stdClass $cron): string {
-        global $CFG;
-
-        if ($cron->failedtasks24h > 0 || $cron->lastrunat === 0) {
-            return 'error';
-        }
-
-        $expectedfrequency = $CFG->expectedcronfrequency ?? MINSECS;
-        if ((time() - $cron->lastrunat) > $expectedfrequency + MINSECS) {
-            return 'warning';
-        }
-
-        return 'ok';
     }
 
     /**

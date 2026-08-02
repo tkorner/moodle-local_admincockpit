@@ -45,6 +45,7 @@
         "settingsurl": "http://example.com/admin/settings.php?section=local_admincockpit_settings",
         "lastcomputedtext": "Stand: 11 July 2026, 20:00, updates daily.",
         "sesskey": "abcdef1234",
+        "cansitewidepurge": true,
         "healthsignals": [
             {
                 "label": "Duplicate emails",
@@ -93,6 +94,16 @@
                     {{#str}} purgecache, local_admincockpit {{/str}}
                 </button>
             </form>
+            {{#cansitewidepurge}}
+            <form method="post" action="{{dashboardurl}}" class="m-0">
+                <input type="hidden" name="sesskey" value="{{sesskey}}">
+                <input type="hidden" name="purgeallcaches" value="1">
+                <input type="hidden" name="timerangedays" value="{{timerangedays}}">
+                <button type="submit" class="btn btn-link btn-sm p-0">
+                    {{#str}} purgeallcaches, local_admincockpit {{/str}}
+                </button>
+            </form>
+            {{/cansitewidepurge}}
         </div>
     </div>
 

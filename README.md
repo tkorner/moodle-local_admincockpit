@@ -61,6 +61,54 @@ ignored.
 | Relative "last run X ago" | `format_time(time() - $timestamp)` - the same idiom core's own `lastaccess` report columns use | `admin/classes/reportbuilder/local/systemreports/users.php` |
 | Restore-course shortcut | `backup/restorefile.php?contextid={system context}` - the exact link Site administration → Courses uses for a course-agnostic restore entry point | `admin/settings/courses.php` |
 
+## Extending: add your own health signal
+
+The four built-in health signals (duplicate emails, courses without an end
+date, unpublished courses, security overview, cron status) are not a fixed
+set - they're this plugin's own consumer of a public extension point, the
+`local_admincockpit\hook\health_signals` hook. Any other Moodle plugin can
+add its own tile to the dashboard's health-signals row without any code
+change or coordination here:
+
+```php
+// your_plugin/db/hooks.php
+$callbacks = [
+    [
+        'hook' => \local_admincockpit\hook\health_signals::class,
+        'callback' => [\your_plugin\hook_listener::class, 'add_signal'],
+    ],
+];
+
+// your_plugin/classes/hook_listener.php
+namespace your_plugin;
+
+class hook_listener {
+    public static function add_signal(\local_admincockpit\hook\health_signals $hook): void {
+        $hook->add_signal(new \local_admincockpit\health_signal(
+            component: 'your_plugin',
+            key: 'yoursignal',
+            label: get_string('yoursignal', 'your_plugin'),
+            value: your_own_count_query(),
+            severity: 'warning', // or 'ok' / 'error'
+            url: '/your_plugin/drilldown.php',
+        ));
+    }
+}
+```
+
+A health signal is always a number with a click-target, never a bare
+statistic - see `classes/health_signal.php` for the full DTO contract. Your
+own drill-down page at the `url` you provide is entirely your plugin's
+responsibility, same as caching an expensive query (this dashboard renders
+on every page view, so an uncached heavy query here slows down every
+admin's load, not just your own page - see `classes/metrics/health_signals.php`
+for the caching convention this plugin's own signals follow).
+
+Once installed, your signal automatically shows up in the "Health signal
+order / visibility" setting (`local_admincockpit/healthsignals`,
+identified as `your_plugin:yoursignal`), enabled by default - no PR against
+this plugin, no version coordination, nothing to ask the maintainer for.
+
 ## Known open assumptions
 
 A handful of judgment calls are deliberately not hidden away - each is
@@ -90,9 +138,11 @@ documented at the point of decision in the relevant class's docblock:
 ## Capability
 
 `local/admincockpit:view` (system context, granted to the Manager
-archetype by default) gates the dashboard and its two drill-down pages. The
+archetype by default) gates the dashboard and its drill-down pages. The
 settings page additionally requires `moodle/site:config`, same as any
-other plugin configuration page.
+other plugin configuration page - as does the dashboard's "Purge ALL site
+caches" quick action, a stricter gate than the page itself since it's a
+much more impactful, instance-wide operation.
 
 ## Install
 

@@ -56,6 +56,23 @@ if (optional_param('purgecache', 0, PARAM_BOOL)) {
     );
 }
 
+// Full site-wide cache purge (SPEC section 5, "Quick cache purge"): a much more impactful action
+// than the per-plugin refresh above (rebuilds the class-autoloader map, theme caches, string
+// caches, etc. across the entire instance), so it deliberately requires moodle/site:config rather
+// than only local/admincockpit:view - same capability core's own "Purge caches" admin page
+// (admin/purgecaches.php) requires, not a bespoke restriction invented here.
+if (optional_param('purgeallcaches', 0, PARAM_BOOL)) {
+    require_sesskey();
+    require_capability('moodle/site:config', \core\context\system::instance());
+    purge_all_caches();
+    redirect(
+        new \core\url('/local/admincockpit/index.php', ['timerangedays' => $timerangedays]),
+        get_string('allcachespurged', 'local_admincockpit'),
+        null,
+        \core\output\notification::NOTIFY_SUCCESS
+    );
+}
+
 // Fired here, not right after admin_externalpage_setup() above, so a purge-cache request
 // (which redirects away without ever rendering the dashboard) doesn't log a spurious "viewed"
 // event - the capability check already happened via admin_externalpage_setup().

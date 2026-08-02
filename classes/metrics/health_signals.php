@@ -59,6 +59,11 @@ class health_signals {
      */
     private const DUPLICATEEMAILS_MAXGROUPS = 500;
 
+    /** @var int Hard cap on unpublished_courses()'s drill-down rows, same rationale as
+     *  COURSESWITHOUTENDDATE_MAXDETAILS - count stays exact, only the detail list is capped.
+     */
+    private const UNPUBLISHEDCOURSES_MAXDETAILS = 500;
+
     /**
      * Finds email addresses shared by more than one non-deleted, locally
      * managed, non-guest user account.
@@ -176,6 +181,75 @@ class health_signals {
             null,
             0,
             self::COURSESWITHOUTENDDATE_MAXDETAILS
+        );
+
+        $result = new \stdClass();
+        $result->details = [];
+        foreach ($courses as $course) {
+            $result->details[] = (object) [
+                'courseid' => $course->id,
+                'fullname' => $course->fullname,
+                'categoryid' => $course->categoryid,
+                'categoryname' => $course->categoryname,
+            ];
+        }
+        $result->count = $count;
+        $result->detailstruncated = $count > count($result->details);
+
+        return $result;
+    }
+
+    /**
+     * Finds courses hidden (visible = 0) for longer than $days.
+     *
+     * Deliberately NOT a bare visible = 0 check (step 19): hiding a course
+     * while still preparing it is completely normal, intentional behaviour,
+     * not a health problem - flagging every hidden course would be exactly
+     * the kind of false-positive-prone signal already rejected once for
+     * "auth mismatch" (see SPEC section 11). Pairing the visibility check
+     * with an age condition (created more than $days ago) targets actually-
+     * abandoned drafts instead.
+     *
+     * The join against course_categories naturally excludes the site course
+     * (category = 0), same reasoning as courses_without_enddate() above.
+     *
+     * @param int $days a course must have been created at least this many
+     *        days ago to count (local_admincockpit/unpublishedcoursedays
+     *        setting)
+     * @return \stdClass with count (exact, uncapped), details (array of
+     *         stdClass: courseid, fullname, categoryid, categoryname -
+     *         capped at UNPUBLISHEDCOURSES_MAXDETAILS rows), detailstruncated
+     *         (bool), and computedat (see db/caches.php, 1 day TTL)
+     */
+    public static function unpublished_courses(int $days): \stdClass {
+        return self::from_cache(
+            'unpublishedcourses_' . $days,
+            fn () => self::compute_unpublished_courses($days)
+        );
+    }
+
+    /**
+     * Computes the unpublished_courses() signal.
+     *
+     * @param int $days
+     * @return \stdClass with count, details, and detailstruncated
+     */
+    private static function compute_unpublished_courses(int $days): \stdClass {
+        global $DB;
+
+        $fromwhere = "FROM {course} c
+                       JOIN {course_categories} cc ON cc.id = c.category
+                      WHERE c.visible = 0 AND c.timecreated <= :since";
+        $params = ['since' => time() - ($days * DAYSECS)];
+
+        $count = $DB->count_records_sql("SELECT COUNT(*) {$fromwhere}", $params);
+
+        $courses = $DB->get_records_sql(
+            "SELECT c.id, c.fullname, cc.id AS categoryid, cc.name AS categoryname {$fromwhere}
+              ORDER BY c.fullname",
+            $params,
+            0,
+            self::UNPUBLISHEDCOURSES_MAXDETAILS
         );
 
         $result = new \stdClass();

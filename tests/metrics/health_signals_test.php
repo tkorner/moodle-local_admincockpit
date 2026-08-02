@@ -126,6 +126,59 @@ final class health_signals_test extends \advanced_testcase {
     }
 
     /**
+     * A course hidden longer than the threshold is reported; a course
+     * hidden only briefly (still "being prepared") or visible at all must
+     * not be - the age condition is what tells the two apart (step 19).
+     *
+     * @covers \local_admincockpit\metrics\health_signals::unpublished_courses
+     * @return void
+     */
+    public function test_unpublished_courses_finds_long_hidden_courses_only(): void {
+        $this->resetAfterTest(true);
+        global $DB;
+
+        $category = $this->getDataGenerator()->create_category(['name' => 'Test Category']);
+
+        $longhidden = $this->getDataGenerator()->create_course(['category' => $category->id, 'visible' => 0]);
+        $DB->set_field('course', 'timecreated', time() - (120 * DAYSECS), ['id' => $longhidden->id]);
+
+        $recentlyhidden = $this->getDataGenerator()->create_course(['category' => $category->id, 'visible' => 0]);
+        $DB->set_field('course', 'timecreated', time() - (5 * DAYSECS), ['id' => $recentlyhidden->id]);
+
+        $this->getDataGenerator()->create_course(['category' => $category->id, 'visible' => 1]);
+
+        $result = health_signals::unpublished_courses(90);
+
+        $this->assertSame(1, $result->count);
+        $this->assertCount(1, $result->details);
+        $this->assertFalse($result->detailstruncated);
+        $this->assertSame($longhidden->id, $result->details[0]->courseid);
+        $this->assertSame($category->id, $result->details[0]->categoryid);
+    }
+
+    /**
+     * Widening the threshold correctly includes a course that was still
+     * excluded at a narrower one - proves the age comparison itself is
+     * correct, not just its presence.
+     *
+     * @covers \local_admincockpit\metrics\health_signals::unpublished_courses
+     * @return void
+     */
+    public function test_unpublished_courses_wider_threshold_includes_more(): void {
+        $this->resetAfterTest(true);
+        global $DB;
+
+        $category = $this->getDataGenerator()->create_category();
+        $course = $this->getDataGenerator()->create_course(['category' => $category->id, 'visible' => 0]);
+        $DB->set_field('course', 'timecreated', time() - (45 * DAYSECS), ['id' => $course->id]);
+
+        $this->assertSame(0, health_signals::unpublished_courses(90)->count);
+
+        \core_cache\cache::make('local_admincockpit', 'dashboarddata')->purge();
+        $this->assertSame(1, health_signals::unpublished_courses(30)->count);
+    }
+
+    /**
      * Every real security check the core API returns must end up in exactly
      * one of the three buckets - this can't fake individual check statuses
      * (they depend on the real php.ini/config.php of whatever environment

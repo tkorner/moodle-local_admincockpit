@@ -15,7 +15,12 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version file.
+ * Hook callbacks for local_admincockpit.
+ *
+ * This plugin registers a callback for its OWN health_signals hook, the
+ * same way any third-party plugin would - the four built-in signals are
+ * just the first consumer of the extension point, not a special case.
+ * See classes/hook/health_signals.php and classes/hook/local_listener.php.
  *
  * @package   local_admincockpit
  * @copyright 2026 Thomas Korner <thomas.korner@edu.zh.ch>
@@ -24,9 +29,10 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'local_admincockpit';
-$plugin->version   = 2026080201;   // YYYYMMDDXX.
-$plugin->requires  = 2025100600;   // Moodle 5.1.0 branching version (MOODLE_501_STABLE) - supports 5.1 and 5.2.
-$plugin->supported = [501, 502];   // Range (inclusive), not a list - see lib/upgrade.txt's $plugin->supported example.
-$plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '2.2.0';
+$callbacks = [
+    [
+        'hook' => \local_admincockpit\hook\health_signals::class,
+        'callback' => [\local_admincockpit\hook\local_listener::class, 'add_builtin_signals'],
+        'priority' => 0,
+    ],
+];

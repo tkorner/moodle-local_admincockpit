@@ -15,8 +15,8 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Ad-hoc visual check of all four health_signals methods against the real
- * data of the running instance.
+ * Ad-hoc visual check of all health_signals methods against the real data
+ * of the running instance.
  *
  * Not a substitute for tests/metrics/health_signals_test.php - this script
  * exists to let you eyeball the current instance's numbers immediately, e.g.:
@@ -39,6 +39,11 @@ echo PHP_EOL;
 
 echo '== courses_without_enddate ==' . PHP_EOL;
 var_export(health_signals::courses_without_enddate());
+echo PHP_EOL;
+
+echo '== unpublished_courses (90 days) ==' . PHP_EOL;
+$unpublishedcoursedays = (int) (get_config('local_admincockpit', 'unpublishedcoursedays') ?: 90);
+var_export(health_signals::unpublished_courses($unpublishedcoursedays));
 echo PHP_EOL;
 
 echo '== security_overview_summary ==' . PHP_EOL;
