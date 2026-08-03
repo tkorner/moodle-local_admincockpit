@@ -32,6 +32,7 @@ final class health_signal_test extends \advanced_testcase {
      * All constructor arguments are stored as-is on their matching
      * readonly properties.
      *
+     * @covers \local_admincockpit\health_signal::__construct
      * @return void
      */
     public function test_constructor_stores_all_values(): void {
@@ -61,6 +62,7 @@ final class health_signal_test extends \advanced_testcase {
      * most signals (e.g. duplicate emails, courses without an end date)
      * don't need either.
      *
+     * @covers \local_admincockpit\health_signal::__construct
      * @return void
      */
     public function test_optional_arguments_default_to_empty_string(): void {
@@ -81,6 +83,7 @@ final class health_signal_test extends \advanced_testcase {
      * value accepts both an int (e.g. duplicate-email count) and a string
      * (e.g. the security overview's compact "15 OK · 4 warnings" summary).
      *
+     * @covers \local_admincockpit\health_signal::__construct
      * @return void
      */
     public function test_value_accepts_int_and_string(): void {

@@ -48,6 +48,7 @@ final class health_signals_test extends \advanced_testcase {
      * registration and returns exactly the four SPEC section 4 signals,
      * each correctly identified by component+key.
      *
+     * @covers \local_admincockpit\hook\health_signals::add_signal
      * @return void
      */
     public function test_dispatch_returns_four_builtin_signals(): void {
@@ -74,6 +75,7 @@ final class health_signals_test extends \advanced_testcase {
      * cron just having run, presumably no security errors on a fresh test
      * install) reports 'ok' for the two simple count-based signals.
      *
+     * @covers \local_admincockpit\hook\health_signals::add_signal
      * @return void
      */
     public function test_clean_site_reports_ok_for_count_based_signals(): void {

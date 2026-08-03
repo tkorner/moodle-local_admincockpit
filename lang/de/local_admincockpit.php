@@ -25,9 +25,9 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['activeschools'] = 'Aktive {$a}-Kürzel';
-$string['allcachespurged'] = 'Alle Site-Caches geleert (Klassen-Map, Theme, Sprachstrings und mehr) - nicht nur die eigenen zwischengespeicherten Zahlen dieses Plugins.';
 $string['activeschools_desc'] = 'Nur vollständig gepaarte Kürzel (Kohorte und Top-Level-Kategorie mit identischer idnumber) stehen hier zur Auswahl. Sie werden auf dem Dashboard angezeigt.';
 $string['activeschools_option'] = '{$a->idnumber} ({$a->cohortname} / {$a->categoryname})';
+$string['allcachespurged'] = 'Alle Site-Caches geleert (Klassen-Map, Theme, Sprachstrings und mehr) - nicht nur die eigenen zwischengespeicherten Zahlen dieses Plugins.';
 $string['activeusers'] = 'Aktiv';
 $string['activeusers_help'] = 'Konten mit einem Website-Zugriff (lastaccess) innerhalb des oben gewählten Zeitraums. Über das Dropdown oben auf der Seite änderbar.';
 $string['admincockpit:view'] = 'Admin-Cockpit ansehen';

@@ -38,6 +38,8 @@ namespace local_admincockpit;
  */
 final class health_signal {
     /**
+     * Constructs a health signal.
+     *
      * @param string $component frankenstyle component of whoever produced
      *        this signal, e.g. 'local_admincockpit' for the built-in ones -
      *        together with $key this is the stable identity used by the
@@ -53,13 +55,21 @@ final class health_signal {
      *        $OUTPUT->help_icon())
      */
     public function __construct(
+        /** @var string frankenstyle component of whoever produced this signal */
         public readonly string $component,
+        /** @var string identifier unique within $component */
         public readonly string $key,
+        /** @var string already-translated display label */
         public readonly string $label,
+        /** @var int|string the tile's displayed value */
         public readonly int|string $value,
+        /** @var string one of 'ok', 'warning', 'error' */
         public readonly string $severity,
+        /** @var string site-relative or absolute click-target */
         public readonly string $url,
+        /** @var string optional tooltip/title attribute for the value */
         public readonly string $valuetitle = '',
+        /** @var string optional pre-rendered help icon HTML */
         public readonly string $helpicon = '',
     ) {
     }

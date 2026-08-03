@@ -78,9 +78,9 @@ final class health_signals implements \core\hook\described_hook {
     public static function get_hook_description(): string {
         return 'Allows plugins to add their own tile to the Admin Cockpit dashboard\'s '
             . 'health signals row. A health signal is always a number with a click-target '
-            . '(never a bare statistic) - see `health_signal` for the exact contract. '
-            . 'Register a callback in your own `db/hooks.php` and call `add_signal()` any '
-            . 'number of times; no change to local_admincockpit itself is required.';
+            . "(never a bare statistic) - see local_admincockpit\\health_signal for the exact "
+            . "contract. Register a callback in your own db/hooks.php and call add_signal() "
+            . 'any number of times; no change to local_admincockpit itself is required.';
     }
 
     /**

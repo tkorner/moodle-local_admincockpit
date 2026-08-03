@@ -29,6 +29,9 @@ namespace local_admincockpit;
  */
 final class health_signal_ordering_test extends \advanced_testcase {
     /**
+     * Builds four fixture signals in a fixed order, matching this plugin's
+     * own built-in keys.
+     *
      * @return health_signal[]
      */
     private function fixture_signals(): array {
@@ -45,6 +48,7 @@ final class health_signal_ordering_test extends \advanced_testcase {
      * the exact order the hook produced them - existing installations see no
      * behaviour change at all.
      *
+     * @covers \local_admincockpit\health_signal_ordering::apply
      * @return void
      */
     public function test_empty_setting_keeps_original_order(): void {
@@ -60,6 +64,7 @@ final class health_signal_ordering_test extends \advanced_testcase {
      * Explicitly listed refs are shown in the order they're listed; anything
      * not mentioned is appended afterwards in its original order.
      *
+     * @covers \local_admincockpit\health_signal_ordering::apply
      * @return void
      */
     public function test_explicit_entries_are_reordered_unmentioned_appended(): void {
@@ -77,6 +82,7 @@ final class health_signal_ordering_test extends \advanced_testcase {
      * A '-component:key' prefixed entry hides that signal entirely, without
      * affecting the order of the others.
      *
+     * @covers \local_admincockpit\health_signal_ordering::apply
      * @return void
      */
     public function test_dash_prefixed_entry_hides_signal(): void {
@@ -95,6 +101,7 @@ final class health_signal_ordering_test extends \advanced_testcase {
      * contributing plugin was uninstalled) is silently ignored, same
      * tolerance as the existing 'activeschools' setting for a stale code.
      *
+     * @covers \local_admincockpit\health_signal_ordering::apply
      * @return void
      */
     public function test_stale_ref_to_missing_signal_is_ignored(): void {
@@ -109,6 +116,7 @@ final class health_signal_ordering_test extends \advanced_testcase {
      * parse() splits on newlines, trims whitespace, skips blank lines, and
      * recognises the '-' disable prefix.
      *
+     * @covers \local_admincockpit\health_signal_ordering::parse
      * @return void
      */
     public function test_parse(): void {
