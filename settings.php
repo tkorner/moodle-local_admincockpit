@@ -169,21 +169,20 @@ if ($hassiteconfig) {
             PARAM_RAW
         ));
 
-        // Discovers currently available health signals (this plugin's own four built-in ones,
-        // plus any third-party contributions - see classes/hook/health_signals.php, step 16) so the
-        // admin knows which 'component:key' refs to use below, without having to read source code.
-        $healthsignalshook = new \local_admincockpit\hook\health_signals();
-        \core\hook\manager::get_instance()->dispatch($healthsignalshook);
-        $availablerefs = array_map(
-            [\local_admincockpit\health_signal_ordering::class, 'ref'],
-            $healthsignalshook->get_signals()
-        );
-
+        // Deliberately NOT dispatching the health_signals hook here to list currently available
+        // refs (an earlier version of this code did) - $ADMIN->fulltree gets built in contexts far
+        // beyond a human visiting this settings page, including during a fresh Moodle install/
+        // PHPUnit environment setup, before core has finished setting up default role IDs. Running
+        // a listener's real logic that early - in particular this plugin's own security-overview
+        // signal, which evaluates every \core\check\manager security check - surfaced as PHP
+        // warnings in unrelated core check classes (defaultuserrole/guestrole/frontpagerole) that
+        // moodle-plugin-ci's installer treats as fatal, breaking CI for every release from 2.2.0
+        // onward. Dispatching this hook is only safe from an actual page load (see
+        // classes/output/dashboard_page.php), never from settings.php's synchronous render path.
         $settings->add(new admin_setting_description(
             'local_admincockpit/healthsignals_available',
             '',
             get_string('healthsignals_available', 'local_admincockpit')
-                . \core\output\html_writer::alist($availablerefs)
         ));
 
         // Empty by default: every currently contributed signal stays enabled, in hook-dispatch
