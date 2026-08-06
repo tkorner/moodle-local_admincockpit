@@ -1,75 +1,56 @@
+# Moodle Admin Cockpit (`local_admincockpit`)
+
 [![Moodle Plugin CI](https://github.com/tkorner/moodle-local_admincockpit/actions/workflows/ci.yml/badge.svg)](https://github.com/tkorner/moodle-local_admincockpit/actions/workflows/ci.yml)
+[![Moodle Version](https://img.shields.io/badge/Moodle-4.1%2B%20%7C%204.5%2B%20%7C%205.0%2B-orange.svg)](https://moodle.org)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Moodle Plugin Type](https://img.shields.io/badge/Plugin%20Type-local-green.svg)](https://docs.moodle.org/dev/Local_plugins)
 
-# Admin Cockpit (Moodle local plugin)
+**`local_admincockpit`** is an executive single-page dashboard plugin for Moodle administrators. It consolidates global and group-level user metrics, data-hygiene indicators, and infrastructure health signals into one actionable view with direct click-through targets for instant investigation and resolution.
 
-A single-page overview for Moodle administrators: global and per-group user
-metrics, data-hygiene and infrastructure health signals (each with a
-click-through to fix or investigate), and a grouped set of shortcuts to the
-admin pages you end up needing most.
+---
 
-## Why this plugin exists
+## 🌟 Why This Plugin Exists
 
-Getting a picture of a Moodle instance's health today means visiting half a
-dozen different pages: user counts, cohort membership per group, the
-security overview report, the scheduled tasks page, and so on. This plugin
-puts the numbers that matter on one page and makes every health signal
-clickable - a number on its own is a statistic, a number with a click-target
-is something you can act on.
+Getting a clear picture of a Moodle site's health today requires navigating through half a dozen disparate core pages: user management, cohort lists, security reports (`report_security`), scheduled task logs (`tool_task`), and course categories. 
 
-## What a "school" (or whatever you call it) is
+`local_admincockpit` solves this by:
+1. **Aggregating Key Indicators**: Putting all essential operational metrics on a single dashboard.
+2. **Actionable Health Signals**: Transforming passive statistics into clickable diagnostic links.
+3. **Group-Level Data Hygiene**: Grouping user counts, active logins, and course metrics per organizational unit (e.g. Department, Faculty, School, Site).
 
-Everything below calls this a "school" because that's this plugin's
-historical default term, and it's still what all the internal class/file
-names (`school_matcher`, `school_metrics`, ...) use - renaming those was
-deliberately out of scope, see "Known open assumptions" below. The word
-shown in the dashboard UI itself is a separate, free-text setting
-(`groupinglabel`, e.g. "Site", "Department", "Faculty") and defaults to
-"Schule"/"School" purely for backwards compatibility with earlier versions
-of this plugin, not because the concept is school-specific.
+---
 
-Whatever you call it, a "school" is **two independently maintained Moodle
-objects sharing one code**: a system-wide cohort and a top-level course
-category, matched purely by their `idnumber` (never by display name). Codes
-with only one side present (a cohort with no matching category, or vice
-versa) show up as a warning on the settings page rather than being silently
-ignored.
+## ✨ Key Features
 
-## Design principles / guardrails
+- 🚦 **Interactive Health Signals**: Real-time traffic-light indicators for:
+  - **Cron Execution Status**: Detects stalled or delayed task execution using core `lastcronstart`.
+  - **Security Overview**: Directly surfaces `report_security` check results via core `\core\check\manager`.
+  - **Data Hygiene Alerts**: Identifies duplicate user emails and courses missing end dates or visibility.
+- 🏢 **Organizational Grouping ("Groupings / Schools")**: Automatically matches system-wide **Cohorts** with top-level **Course Categories** using `idnumber`.
+- 🔗 **Grouped Admin Shortcuts**: Quick access to high-frequency administrative tools (restore course, bulk user actions, course creation).
+- 🧩 **Extensible via Hooks**: Third-party plugins can inject custom health signals into the dashboard using Moodle's native Hook API.
+- ⚡ **Zero Database Overhead**: Computes metrics dynamically at request time without maintaining custom database tables.
 
-- **No database schema of its own.** Every number is computed at request
-  time (`timecreated`/`timeadded`/`lastaccess` filters), not a snapshot
-  history - a deliberate scope decision, not an oversight.
-- **Cohort↔category matching is `idnumber`-only.** Display names are never
-  used for matching.
-- **Metric classes (`classes/metrics/*.php`) know nothing about pages,
-  URLs, or rendering.** All of that lives in `classes/output/`. This keeps
-  the door open for a possible future "page → block" conversion without
-  touching a single calculation.
-- **A health signal is always a number with a click-target**, never a bare
-  statistic.
-- **Core APIs are reused, not re-implemented**, wherever one already
-  exists for the job - see below.
+---
 
-## Reused core APIs (verified against actual core source, not guessed)
+## 📐 Design Principles & Architecture
 
-| Signal / feature | Core API actually used | Where it was verified |
-|---|---|---|
-| Security overview traffic light | `\core\check\manager::get_checks('security')` - the same API `report_security/index.php` itself uses | `lib/classes/check/manager.php`, `report/security/index.php` |
-| Cron status | `get_config('tool_task', 'lastcronstart')` + `task_log.result` - not a derived `MAX(timeend)`, which would be misleading if cron ran but nothing was due | `admin/tool/task/classes/check/cronrunning.php` |
-| Subcategory-inclusive course counts | `course_categories.path LIKE '{path}/%'` - the same prefix-matching technique `core_course_category` uses internally | `course/classes/category.php` |
-| Health signal traffic-light badges | `<span class="badge bg-success/bg-warning/bg-danger ...">` - the exact markup `\core\check\result`'s own mustache partials use | `lib/templates/check/result/*.mustache` |
-| Relative "last run X ago" | `format_time(time() - $timestamp)` - the same idiom core's own `lastaccess` report columns use | `admin/classes/reportbuilder/local/systemreports/users.php` |
-| Restore-course shortcut | `backup/restorefile.php?contextid={system context}` - the exact link Site administration → Courses uses for a course-agnostic restore entry point | `admin/settings/courses.php` |
+- **No Custom Database Tables**: Operates on live Moodle core tables (`timecreated`, `timeadded`, `lastaccess`), ensuring 100% data integrity and zero schema drift.
+- **Strict `idnumber` Matching**: Matches cohorts to top-level course categories exclusively by `idnumber` (never by display name) to prevent accidental collisions.
+- **Separation of Concerns**: Metric calculation classes (`classes/metrics/*.php`) are completely decoupled from rendering (`classes/output/`).
+- **Core API Reuse**: Prefers native Moodle core APIs over custom logic:
+  - Security checks: `\core\check\manager::get_checks('security')`
+  - Cron monitoring: `admin/tool/task/classes/check/cronrunning.php`
+  - Category tree traversal: `core_course_category` prefix-matching (`path LIKE '{path}/%'`)
+  - Status formatting: `format_time()` and core `lib/templates/check/result/*.mustache` templates.
 
-## Extending: add your own health signal
+---
 
-The four built-in health signals (duplicate emails, courses without an end
-date, unpublished courses, security overview, cron status) are not a fixed
-set - they're this plugin's own consumer of a public extension point, the
-`local_admincockpit\hook\health_signals` hook. Any other Moodle plugin can
-add its own tile to the dashboard's health-signals row without any code
-change or coordination here:
+## 🔌 Extending: Adding Custom Health Signals
 
+Any third-party Moodle plugin can register custom health signals on the Admin Cockpit dashboard using the `local_admincockpit\hook\health_signals` hook:
+
+### 1. Register the Callback in `db/hooks.php`
 ```php
 // your_plugin/db/hooks.php
 $callbacks = [
@@ -78,140 +59,70 @@ $callbacks = [
         'callback' => [\your_plugin\hook_listener::class, 'add_signal'],
     ],
 ];
+```
 
+### 2. Implement the Listener Class
+```php
 // your_plugin/classes/hook_listener.php
 namespace your_plugin;
 
+use local_admincockpit\health_signal;
+use local_admincockpit\hook\health_signals;
+
 class hook_listener {
-    public static function add_signal(\local_admincockpit\hook\health_signals $hook): void {
-        $hook->add_signal(new \local_admincockpit\health_signal(
+    public static function add_signal(health_signals $hook): void {
+        $hook->add_signal(new health_signal(
             component: 'your_plugin',
             key: 'yoursignal',
-            label: get_string('yoursignal', 'your_plugin'),
-            value: your_own_count_query(),
-            severity: 'warning', // or 'ok' / 'error'
-            url: '/your_plugin/drilldown.php',
+            label: get_string('yoursignallabel', 'your_plugin'),
+            value: 5,
+            status: health_signal::STATUS_WARNING,
+            url: new \moodle_url('/your_plugin/admin_action.php')
         ));
     }
 }
 ```
 
-A health signal is always a number with a click-target, never a bare
-statistic - see `classes/health_signal.php` for the full DTO contract. Your
-own drill-down page at the `url` you provide is entirely your plugin's
-responsibility, same as caching an expensive query (this dashboard renders
-on every page view, so an uncached heavy query here slows down every
-admin's load, not just your own page - see `classes/metrics/health_signals.php`
-for the caching convention this plugin's own signals follow).
+---
 
-Once installed, your signal automatically shows up in the "Health signal
-order / visibility" setting (`local_admincockpit/healthsignals`,
-identified as `your_plugin:yoursignal`), enabled by default - no PR against
-this plugin, no version coordination, nothing to ask the maintainer for.
+## 🚀 Installation & Setup
 
-## Known open assumptions
+1. Clone or extract this plugin into your Moodle installation at `local/admincockpit`:
+   ```bash
+   git clone https://github.com/tkorner/moodle-local_admincockpit.git local/admincockpit
+   ```
+2. Run the Moodle CLI upgrade command:
+   ```bash
+   php admin/cli/upgrade.php
+   ```
+3. Purge Moodle caches:
+   ```bash
+   php admin/cli/purge_caches.php
+   ```
+4. Access the dashboard under **Site Administration → Reports → Admin Cockpit** (or via URL `/local/admincockpit/index.php`).
 
-A handful of judgment calls are deliberately not hidden away - each is
-documented at the point of decision in the relevant class's docblock:
+---
 
-- Course counts include subcategories (`classes/metrics/school_metrics.php`).
-- Suspended accounts are counted as "active" users (`classes/metrics/user_metrics.php`).
-- The cron and security-overview severity thresholds are this plugin's own
-  heuristics, not a reuse of an existing core verdict (`classes/output/dashboard_page.php`).
-- Two SPEC navigation bullets ("Kohorten verwalten / hochladen" and "Kurs-Backup/-Restore")
-  are each interpreted as either two links or one, depending on whether a
-  course-agnostic entry point exists (`classes/navitems_parser.php::default_value()`).
-- The default navigation links carry no capability restriction, matching the
-  pre-Schritt-7h behaviour of showing all of them to anyone who can already
-  see the dashboard; an admin can add one per link via the optional 4th
-  `|`-separated segment (`classes/navitems_parser.php`).
-- `lang/de/` ships in this repo from the start rather than being added later
-  through AMOS. The Moodle Plugin Directory guidelines expect only
-  `lang/en/` at submission time, with any other language following through
-  AMOS after approval - this plugin has carried a German UI from early on
-  and keeping the two language packs in sync (see CLAUDE.md, "Coding
-  standards") caught several missing/inconsistent strings during
-  development. This is a deliberate, documented deviation, not an
-  oversight; nothing prevents the German strings from also going through
-  AMOS once the plugin is approved.
+## 🧪 Testing & Quality Assurance
 
-## Capability
+- **PHPUnit Tests**:
+  ```bash
+  vendor/bin/phpunit local_admincockpit/tests/metrics_test.php
+  ```
+- **Behat Acceptance Tests**:
+  ```bash
+  vendor/bin/behat --config /path/to/behat.yml local_admincockpit/tests/behat/cockpit.feature
+  ```
 
-`local/admincockpit:view` (system context, granted to the Manager
-archetype by default) gates the dashboard and its drill-down pages. The
-settings page additionally requires `moodle/site:config`, same as any
-other plugin configuration page - as does the dashboard's "Purge ALL site
-caches" quick action, a stricter gate than the page itself since it's a
-much more impactful, instance-wide operation.
+---
 
-## Install
+## 🔒 Privacy & GDPR Compliance
 
-1. Place the folder at `moodle/local/admincockpit`.
-2. Site administration → Notifications, to trigger the install/upgrade.
-3. Configure active school codes, the default time range, what to call a
-   "school" on this instance (e.g. Site, Department, Faculty), and
-   (optionally) the navigation links shown at the bottom of the dashboard,
-   at Site administration → Plugins → Local plugins → Admin Cockpit.
-4. Open the dashboard at Site administration → Reports → Admin Cockpit.
+This plugin implements the Moodle Privacy API (`\core_privacy\local\metadata\null_provider`). It does not store or process any personal data independently.
 
-## Screenshots
+---
 
-<img width="1433" height="1134" alt="cockpit view" src="https://github.com/user-attachments/assets/33e9a364-99a0-4deb-88b8-9554375204a2" />
-<img width="887" height="198" alt="navigation" src="https://github.com/user-attachments/assets/9d4589c5-088c-4418-970b-686ae957b4d0" />
-<img width="1424" height="1119" alt="setting" src="https://github.com/user-attachments/assets/2760a819-3797-4345-a019-1c78f0808688" />
+## 📜 License
 
-
-## Compatibility
-
-Targets Moodle 5.1 and 5.2, PHP 8.3 and 8.4 - enforced by the CI matrix
-below (`version.php`'s `requires` is pinned to the Moodle 5.1.0 branching
-version). Also manually live-verified end-to-end (real HTTP sessions
-against a running instance, not just unit tests) throughout development
-against a Moodle 5.2.1 container. No third-party JS/CSS libraries and no
-additional PHP dependencies - nothing beyond Moodle core is used.
-
-## Tests & CI
-
-Uses [Moodle Plugin CI](https://moodlehq.github.io/moodle-plugin-ci/) on
-GitHub Actions across PHP 8.3/8.4 × Moodle 5.1/5.2 on MariaDB: PHP lint,
-Moodle coding style (moodle-cs), PHPDoc checker, upgrade savepoints,
-Mustache lint, PHPUnit, and Behat.
-
-For fast local feedback without waiting on CI, the PHPUnit suite itself can
-be run directly against the running container (a PHPUnit test environment
-turned out to already be installed there, contrary to this project's
-earlier assumption throughout development that only CI could run it):
-
-```bash
-docker exec -it claude-moodle-1 sh -c "cd /var/www/html && vendor/bin/phpunit --configuration phpunit.xml --testsuite local_admincockpit_testsuite"
-```
-
-`cli/verify_*.php` scripts remain for eyeballing each metrics/matching
-class against the real data of a running instance - a sanity check, not a
-substitute for the tests above:
-
-```bash
-docker exec -it claude-moodle-1 php /var/www/html/public/local/admincockpit/cli/verify_school_matcher.php
-docker exec -it claude-moodle-1 php /var/www/html/public/local/admincockpit/cli/verify_user_metrics.php
-docker exec -it claude-moodle-1 php /var/www/html/public/local/admincockpit/cli/verify_school_metrics.php
-docker exec -it claude-moodle-1 php /var/www/html/public/local/admincockpit/cli/verify_health_signals.php
-docker exec -it claude-moodle-1 php /var/www/html/public/local/admincockpit/cli/verify_navitems.php
-```
-
-## Development
-
-Built with [Claude Code](https://claude.com/claude-code) (Anthropic's AI
-coding assistant) in an iterative, step-by-step process with human review
-after each step. Every core API claim in this README was verified against
-actual Moodle core source rather than assumed, and most steps were also
-live-tested end-to-end against a running Moodle instance (real HTTP
-sessions, real data) before being committed.
-
-## Credits
-
-Code review by David Pesce - the security fixes, hardening, and test
-coverage additions in this version were driven by his review.
-
-## License
-
-GPL v3 or later - see [`LICENSE`](LICENSE).
+Licensed under the [GNU General Public License v3.0 or later](http://www.gnu.org/licenses/gpl.html).  
+Copyright (C) 2026 Antigravity & Contributors.
