@@ -34,6 +34,7 @@ $string['admincockpit:view'] = 'View the admin cockpit';
 $string['allcachespurged'] = 'All site caches cleared (class map, theme, strings, and more) - not just this plugin\'s own cached numbers.';
 $string['backtodashboard'] = 'Back to dashboard';
 $string['boostunionsettings'] = 'Boost Union theme settings';
+$string['cachedef_dashboarddata'] = 'Computed dashboard metrics (user/school metrics, health signals)';
 $string['cachepurged'] = 'Cache cleared - the numbers below are freshly computed.';
 $string['courseswithoutenddate'] = 'Courses without an end date';
 $string['courseswithoutenddate_none'] = 'No courses without an end date - nothing to report here.';
@@ -49,9 +50,7 @@ $string['healthsignals'] = 'Health signal order / visibility';
 $string['healthsignals_available'] = 'This plugin\'s own built-in signals: local_admincockpit:duplicateemails, local_admincockpit:courseswithoutenddate, local_admincockpit:unpublishedcourses, local_admincockpit:security, local_admincockpit:cron. A third-party plugin\'s signal uses its own component name instead of local_admincockpit - check the dashboard itself, or that plugin\'s documentation, for its exact key.';
 $string['healthsignals_desc'] = 'One entry per line, using the "component:key" identifiers listed above. A listed entry pins that signal\'s position (top to bottom); prefix with "-" to hide it entirely (e.g. "-local_admincockpit:security"). A signal never mentioned here stays enabled and is shown after the listed ones, in the order it was contributed - so leaving this empty keeps every currently available signal visible, and any newly installed third-party signal shows up automatically without editing this setting.';
 $string['lastcomputed'] = 'As of: {$a}, updates daily.';
-$string['mergeusershint'] = 'This list is a starting point for identifying accounts to merge. The '
-    . '"Merge user accounts" admin tool (tool_mergeusers) is not installed on this instance, so no direct '
-    . 'link is shown here - install it to actually merge two accounts.';
+$string['mergeusershint'] = 'This list is a starting point for identifying accounts to merge. The "Merge user accounts" admin tool (tool_mergeusers) is not installed on this instance, so no direct link is shown here - install it to actually merge two accounts.';
 $string['mergeusershint_link'] = 'This list is a starting point for identifying accounts to merge. Use {$a} to actually merge two accounts.';
 $string['mergeuserslinktext'] = 'Merge user accounts';
 $string['navgroup_courses'] = 'Course management';

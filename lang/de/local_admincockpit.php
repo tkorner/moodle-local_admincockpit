@@ -33,6 +33,7 @@ $string['admincockpit:view'] = 'Admin-Cockpit ansehen';
 $string['allcachespurged'] = 'Alle Site-Caches geleert (Klassen-Map, Theme, Sprachstrings und mehr) - nicht nur die eigenen zwischengespeicherten Zahlen dieses Plugins.';
 $string['backtodashboard'] = 'Zurück zum Dashboard';
 $string['boostunionsettings'] = 'Boost-Union-Theme-Einstellungen';
+$string['cachedef_dashboarddata'] = 'Berechnete Dashboard-Kennzahlen (Nutzer-/Schulmetriken, Health-Signale)';
 $string['cachepurged'] = 'Cache geleert - die Zahlen unten sind frisch berechnet.';
 $string['courseswithoutenddate'] = 'Kurse ohne Enddatum';
 $string['courseswithoutenddate_none'] = 'Keine Kurse ohne Enddatum gefunden - hier gibt es nichts zu melden.';
@@ -48,9 +49,7 @@ $string['healthsignals'] = 'Reihenfolge / Sichtbarkeit der Health-Signale';
 $string['healthsignals_available'] = 'Die eigenen, integrierten Signale dieses Plugins: local_admincockpit:duplicateemails, local_admincockpit:courseswithoutenddate, local_admincockpit:unpublishedcourses, local_admincockpit:security, local_admincockpit:cron. Ein Signal eines Drittanbieter-Plugins verwendet dessen eigenen Komponentennamen statt local_admincockpit - den genauen Schlüssel findest du auf dem Dashboard selbst oder in der Dokumentation dieses Plugins.';
 $string['healthsignals_desc'] = 'Ein Eintrag pro Zeile, mit den oben aufgeführten "component:key"-Kennungen. Ein aufgeführter Eintrag legt die Position dieses Signals fest (von oben nach unten); mit "-" davor wird es komplett ausgeblendet (z.B. "-local_admincockpit:security"). Ein hier nicht erwähntes Signal bleibt aktiv und wird nach den aufgeführten angezeigt, in der Reihenfolge, in der es beigetragen wurde - leer lassen zeigt also weiterhin jedes aktuell verfügbare Signal, und ein neu installiertes Drittanbieter-Signal erscheint automatisch, ohne diese Einstellung anzupassen.';
 $string['lastcomputed'] = 'Stand: {$a}, wird täglich aktualisiert.';
-$string['mergeusershint'] = 'Diese Liste ist ein Ausgangspunkt, um zusammenzuführende Konten zu identifizieren. '
-    . 'Das Admin-Tool "Merge user accounts" (tool_mergeusers) ist auf dieser Instanz nicht installiert, daher '
-    . 'wird hier kein direkter Link angezeigt - installiere es, um Konten tatsächlich zusammenzuführen.';
+$string['mergeusershint'] = 'Diese Liste ist ein Ausgangspunkt, um zusammenzuführende Konten zu identifizieren. Das Admin-Tool "Merge user accounts" (tool_mergeusers) ist auf dieser Instanz nicht installiert, daher wird hier kein direkter Link angezeigt - installiere es, um Konten tatsächlich zusammenzuführen.';
 $string['mergeusershint_link'] = 'Diese Liste ist ein Ausgangspunkt, um zusammenzuführende Konten zu identifizieren. Nutze {$a} für die eigentliche Zusammenführung.';
 $string['mergeuserslinktext'] = 'Merge user accounts';
 $string['navgroup_courses'] = 'Kursverwaltung';
