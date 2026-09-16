@@ -243,7 +243,11 @@ final class navitems_parser_test extends \advanced_testcase {
         }
 
         $pluginman = \core\plugin_manager::instance();
-        $mergeuserslabel = get_string('pluginname', 'tool_mergeusers');
+        // get_string() on an uninstalled plugin's own language file triggers a debugging()
+        // notice - only ask for the string when the plugin providing it is actually there.
+        $mergeuserslabel = $pluginman->get_plugin_info('tool_mergeusers')
+            ? get_string('pluginname', 'tool_mergeusers')
+            : null;
         $boostunionlabel = get_string('boostunionsettings', 'local_admincockpit');
 
         $this->assertSame(
