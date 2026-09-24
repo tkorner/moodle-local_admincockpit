@@ -170,6 +170,7 @@ class navitems_parser {
         $lines[] = self::line(get_string('pluginname', 'report_configlog'), '/report/configlog/index.php', $groupreports);
 
         $lines[] = self::line(get_string('scheduledtasks', 'tool_task'), '/admin/tool/task/scheduledtasks.php', $groupsystem);
+        $lines[] = self::line(get_string('pluginsoverview', 'admin'), '/admin/plugins.php', $groupsystem);
 
         if ($pluginman->get_plugin_info('theme_boost_union')) {
             $lines[] = self::line(
