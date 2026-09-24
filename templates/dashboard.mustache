@@ -107,6 +107,16 @@
         </div>
     </div>
 
+    {{#hasloginasform}}
+    <div class="card mb-4">
+        <div class="card-body">
+            <h3 class="h5 mt-0">{{#str}} loginas_heading, local_admincockpit {{/str}}</h3>
+            <p class="text-muted small">{{#str}} loginas_intro, local_admincockpit {{/str}}</p>
+            {{{loginasformhtml}}}
+        </div>
+    </div>
+    {{/hasloginasform}}
+
     <h3>{{#str}} section_globalusers, local_admincockpit {{/str}}</h3>
     <div class="row mb-4">
         {{#usermetrics}}

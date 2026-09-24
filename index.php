@@ -73,6 +73,39 @@ if (optional_param('purgeallcaches', 0, PARAM_BOOL)) {
     );
 }
 
+// One-click impersonate (SPEC section 5). Handled before any output, since
+// \core\session\manager::loginas() swaps the session out from under us.
+//
+// Authorisation is deliberately NOT decided here - loginas_guard wraps core's own
+// \core\session\loginas_helper plus this plugin's extra "never a site admin" rule, and is
+// unit-tested on its own. moodleform::get_data() already enforces the sesskey, so there is no
+// separate require_sesskey() call: reaching this branch at all means the token checked out.
+$loginasform = null;
+if (\local_admincockpit\loginas_guard::is_available()) {
+    $loginasform = new \local_admincockpit\form\loginas_form(
+        new \core\url('/local/admincockpit/index.php')
+    );
+
+    if ($formdata = $loginasform->get_data()) {
+        $targetuser = \core_user::get_user((int) $formdata->loginasuser, '*', MUST_EXIST);
+        $loginascontext = \local_admincockpit\loginas_guard::context_for($targetuser);
+
+        if ($loginascontext === null) {
+            redirect(
+                new \core\url('/local/admincockpit/index.php', ['timerangedays' => $timerangedays]),
+                get_string('loginas_refused', 'local_admincockpit'),
+                null,
+                \core\output\notification::NOTIFY_ERROR
+            );
+        }
+
+        \core\session\manager::loginas($targetuser->id, $loginascontext);
+        // Same notice core's own course/loginas.php shows after switching.
+        \core\notification::info(get_string('sessionforceclean', 'core'));
+        redirect(new \core\url('/'));
+    }
+}
+
 // Fired here, not right after admin_externalpage_setup() above, so a purge-cache request
 // (which redirects away without ever rendering the dashboard) doesn't log a spurious "viewed"
 // event - the capability check already happened via admin_externalpage_setup().
@@ -81,7 +114,7 @@ dashboard_viewed::create([
     'other' => ['page' => 'index.php'],
 ])->trigger();
 
-$page = new dashboard_page($timerangedays);
+$page = new dashboard_page($timerangedays, $loginasform ? $loginasform->render() : '');
 $renderer = $PAGE->get_renderer('local_admincockpit');
 
 echo $OUTPUT->header();

@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_admincockpit';
-$plugin->version   = 2026092401;   // YYYYMMDDXX.
+$plugin->version   = 2026092402;   // YYYYMMDDXX.
 $plugin->requires  = 2025100600;   // Moodle 5.1.0 branching version (MOODLE_501_STABLE) - supports 5.1 and 5.2.
 // 503 added after verifying against Moodle 5.3dev/beta (no MOODLE_503_STABLE branch cut yet,
 // core still MATURITY_BETA as of this build) in a throwaway docker-compose instance: plugin

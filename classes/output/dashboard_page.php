@@ -43,14 +43,23 @@ class dashboard_page implements \core\output\renderable, \core\output\templatabl
     /** @var int */
     private $timerangedays;
 
+    /** @var string pre-rendered quick-login form HTML, '' when unavailable */
+    private $loginasformhtml;
+
     /**
      * Constructor.
      *
      * @param int $timerangedays effective time range for this page view
      *        (the configured default, or a temporary GET override)
+     * @param string $loginasformhtml already-rendered quick-login form, or ''
+     *        to leave the control off the page entirely. Passed in rather
+     *        than built here because the same form object has to exist
+     *        earlier in the request to process its own submission, before
+     *        any output (see index.php).
      */
-    public function __construct(int $timerangedays) {
+    public function __construct(int $timerangedays, string $loginasformhtml = '') {
         $this->timerangedays = $timerangedays;
+        $this->loginasformhtml = $loginasformhtml;
     }
 
     /**
@@ -76,6 +85,8 @@ class dashboard_page implements \core\output\renderable, \core\output\templatabl
             'lastcomputedtext' => $this->export_lastcomputedtext(),
             'sesskey' => sesskey(),
             'cansitewidepurge' => has_capability('moodle/site:config', \core\context\system::instance()),
+            'loginasformhtml' => $this->loginasformhtml,
+            'hasloginasform' => $this->loginasformhtml !== '',
             'healthsignals' => $this->export_health_signals($output),
             'navgroups' => $navgroups,
             'nonavitemsconfigured' => empty($navgroups),
