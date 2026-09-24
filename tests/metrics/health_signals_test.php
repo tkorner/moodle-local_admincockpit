@@ -220,7 +220,7 @@ final class health_signals_test extends \advanced_testcase {
         $this->assertFalse($result->detailstruncated);
         $this->assertSame($expireduser->id, $result->details[0]->userid);
         $this->assertSame($course->id, $result->details[0]->courseid);
-        // fullname() needs every name field selected, same trap as duplicate_emails().
+        // Calling fullname() needs every name field selected, same trap as duplicate_emails().
         $this->assertDebuggingNotCalled();
     }
 
