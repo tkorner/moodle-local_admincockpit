@@ -179,6 +179,165 @@ final class health_signals_test extends \advanced_testcase {
     }
 
     /**
+     * An active enrolment whose end date has passed is reported; one that
+     * ends in the future, one with no end date at all, and a suspended one
+     * that has expired must not be - "still active AND already over" is the
+     * whole point of this signal.
+     *
+     * @covers \local_admincockpit\metrics\health_signals::expired_enrolments
+     * @return void
+     */
+    public function test_expired_enrolments_finds_active_but_overdue_only(): void {
+        $this->resetAfterTest(true);
+
+        $course = $this->getDataGenerator()->create_course();
+        $generator = $this->getDataGenerator();
+
+        $expireduser = $generator->create_user();
+        $generator->enrol_user($expireduser->id, $course->id, 'student', 'manual', 0, time() - DAYSECS);
+
+        $futureuser = $generator->create_user();
+        $generator->enrol_user($futureuser->id, $course->id, 'student', 'manual', 0, time() + WEEKSECS);
+
+        $noenduser = $generator->create_user();
+        $generator->enrol_user($noenduser->id, $course->id, 'student', 'manual', 0, 0);
+
+        $suspendeduser = $generator->create_user();
+        $generator->enrol_user(
+            $suspendeduser->id,
+            $course->id,
+            'student',
+            'manual',
+            0,
+            time() - DAYSECS,
+            ENROL_USER_SUSPENDED
+        );
+
+        $result = health_signals::expired_enrolments();
+
+        $this->assertSame(1, $result->count);
+        $this->assertCount(1, $result->details);
+        $this->assertFalse($result->detailstruncated);
+        $this->assertSame($expireduser->id, $result->details[0]->userid);
+        $this->assertSame($course->id, $result->details[0]->courseid);
+        // fullname() needs every name field selected, same trap as duplicate_emails().
+        $this->assertDebuggingNotCalled();
+    }
+
+    /**
+     * A deleted user's expired enrolment must not be reported - the account
+     * is gone, so there is nothing for an admin to act on.
+     *
+     * @covers \local_admincockpit\metrics\health_signals::expired_enrolments
+     * @return void
+     */
+    public function test_expired_enrolments_ignores_deleted_users(): void {
+        $this->resetAfterTest(true);
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id, 'student', 'manual', 0, time() - DAYSECS);
+        $DB->set_field('user', 'deleted', 1, ['id' => $user->id]);
+
+        $result = health_signals::expired_enrolments();
+
+        $this->assertSame(0, $result->count);
+        $this->assertCount(0, $result->details);
+    }
+
+    /**
+     * Self-enrolment instances missing a key, an end date, or both are
+     * reported with per-row flags saying which; one that has both is not
+     * reported at all.
+     *
+     * @covers \local_admincockpit\metrics\health_signals::self_enrolment_risks
+     * @return void
+     */
+    public function test_self_enrolment_risks_flags_missing_key_and_enddate(): void {
+        $this->resetAfterTest(true);
+
+        $nokey = $this->create_self_enrol_instance('No key', '', time() + WEEKSECS);
+        $noenddate = $this->create_self_enrol_instance('No end date', 'secret', 0);
+        $neither = $this->create_self_enrol_instance('Neither', '', 0);
+        $this->create_self_enrol_instance('Fully configured', 'secret', time() + WEEKSECS);
+
+        $result = health_signals::self_enrolment_risks();
+
+        $this->assertSame(3, $result->count);
+        $this->assertCount(3, $result->details);
+        $this->assertFalse($result->detailstruncated);
+
+        $bycourse = [];
+        foreach ($result->details as $row) {
+            $bycourse[$row->courseid] = $row;
+        }
+        $this->assertArrayHasKey($nokey, $bycourse);
+        $this->assertTrue($bycourse[$nokey]->nokey);
+        $this->assertFalse($bycourse[$nokey]->noenddate);
+
+        $this->assertArrayHasKey($noenddate, $bycourse);
+        $this->assertFalse($bycourse[$noenddate]->nokey);
+        $this->assertTrue($bycourse[$noenddate]->noenddate);
+
+        $this->assertArrayHasKey($neither, $bycourse);
+        $this->assertTrue($bycourse[$neither]->nokey);
+        $this->assertTrue($bycourse[$neither]->noenddate);
+    }
+
+    /**
+     * A disabled self-enrolment method cannot take enrolments, so it is not
+     * a risk and must not be reported even with no key and no end date.
+     *
+     * @covers \local_admincockpit\metrics\health_signals::self_enrolment_risks
+     * @return void
+     */
+    public function test_self_enrolment_risks_ignores_disabled_instances(): void {
+        $this->resetAfterTest(true);
+
+        $this->create_self_enrol_instance('Disabled', '', 0, ENROL_INSTANCE_DISABLED);
+
+        $result = health_signals::self_enrolment_risks();
+
+        $this->assertSame(0, $result->count);
+        $this->assertCount(0, $result->details);
+    }
+
+    /**
+     * Creates a course with one self-enrolment instance configured as given.
+     * The self plugin's own add_instance() applies site defaults (including
+     * generating a password when enrol_self/requirepassword is on), so the
+     * fields under test are set explicitly afterwards.
+     *
+     * @param string $coursename
+     * @param string $password enrolment key, '' for none
+     * @param int $enrolenddate 0 for none
+     * @param int $status ENROL_INSTANCE_ENABLED or ENROL_INSTANCE_DISABLED
+     * @return int the course id
+     */
+    private function create_self_enrol_instance(
+        string $coursename,
+        string $password,
+        int $enrolenddate,
+        int $status = ENROL_INSTANCE_ENABLED
+    ): int {
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course(['fullname' => $coursename]);
+        $plugin = enrol_get_plugin('self');
+        $instanceid = $plugin->add_instance($course);
+
+        $DB->update_record('enrol', (object) [
+            'id' => $instanceid,
+            'password' => $password,
+            'enrolenddate' => $enrolenddate,
+            'status' => $status,
+        ]);
+
+        return $course->id;
+    }
+
+    /**
      * Every real security check the core API returns must end up in exactly
      * one of the three buckets - this can't fake individual check statuses
      * (they depend on the real php.ini/config.php of whatever environment

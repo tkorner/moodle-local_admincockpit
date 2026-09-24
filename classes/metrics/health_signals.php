@@ -64,6 +64,16 @@ class health_signals {
      */
     private const UNPUBLISHEDCOURSES_MAXDETAILS = 500;
 
+    /** @var int Hard cap on expired_enrolments()'s drill-down rows, same rationale as
+     *  COURSESWITHOUTENDDATE_MAXDETAILS - count stays exact, only the detail list is capped.
+     */
+    private const EXPIREDENROLMENTS_MAXDETAILS = 500;
+
+    /** @var int Hard cap on self_enrolment_risks()'s drill-down rows, same rationale as
+     *  COURSESWITHOUTENDDATE_MAXDETAILS - count stays exact, only the detail list is capped.
+     */
+    private const SELFENROLRISKS_MAXDETAILS = 500;
+
     /**
      * Finds email addresses shared by more than one non-deleted, locally
      * managed, non-guest user account.
@@ -260,6 +270,155 @@ class health_signals {
                 'fullname' => $course->fullname,
                 'categoryid' => $course->categoryid,
                 'categoryname' => $course->categoryname,
+            ];
+        }
+        $result->count = $count;
+        $result->detailstruncated = $count > count($result->details);
+
+        return $result;
+    }
+
+    /**
+     * Finds active user enrolments whose end date has already passed.
+     *
+     * "Active" and "has an end date" both use core's own conventions
+     * (verified against lib/enrollib.php rather than assumed): status = 0 is
+     * ENROL_USER_ACTIVE, and timeend = 0 means "no end date" - the same
+     * default enrol_plugin::enrol_user() itself uses, and the same idiom
+     * core's own enrolment-expiry-warning query (enrol_send_expiry_notifications())
+     * checks against (timeend > 0 AND ...). A suspended enrolment or one with
+     * no end date at all is not a problem this signal is about.
+     *
+     * @return \stdClass with count (exact, uncapped), details (array of
+     *         stdClass: userid, fullname, courseid, coursefullname, timeend -
+     *         capped at EXPIREDENROLMENTS_MAXDETAILS rows, oldest expiry
+     *         first), detailstruncated (bool), and computedat (see
+     *         db/caches.php, 1 day TTL)
+     */
+    public static function expired_enrolments(): \stdClass {
+        return self::from_cache('expiredenrolments', [self::class, 'compute_expired_enrolments']);
+    }
+
+    /**
+     * Computes the expired_enrolments() signal.
+     *
+     * @return \stdClass with count, details, and detailstruncated
+     */
+    private static function compute_expired_enrolments(): \stdClass {
+        global $DB, $CFG;
+
+        $fromwhere = "FROM {user_enrolments} ue
+                       JOIN {enrol} e ON e.id = ue.enrolid
+                       JOIN {course} c ON c.id = e.courseid
+                       JOIN {user} u ON u.id = ue.userid
+                      WHERE ue.status = :active
+                        AND ue.timeend > 0
+                        AND ue.timeend < :now
+                        AND u.deleted = 0
+                        AND u.id != :guestid
+                        AND u.mnethostid = :mnethostid";
+        $params = [
+            'active' => ENROL_USER_ACTIVE,
+            'now' => time(),
+            'guestid' => $CFG->siteguest,
+            'mnethostid' => $CFG->mnet_localhost_id,
+        ];
+
+        $count = $DB->count_records_sql("SELECT COUNT(*) {$fromwhere}", $params);
+
+        $namefields = implode(', ', array_map(
+            fn ($field) => "u.{$field}",
+            \core_user\fields::get_name_fields()
+        ));
+        $rows = $DB->get_records_sql(
+            "SELECT ue.id, u.id AS userid, {$namefields}, c.id AS courseid, c.fullname AS coursefullname,
+                    ue.timeend
+               {$fromwhere}
+           ORDER BY ue.timeend ASC",
+            $params,
+            0,
+            self::EXPIREDENROLMENTS_MAXDETAILS
+        );
+
+        $result = new \stdClass();
+        $result->details = [];
+        foreach ($rows as $row) {
+            $result->details[] = (object) [
+                'userid' => $row->userid,
+                'fullname' => fullname($row),
+                'courseid' => $row->courseid,
+                'coursefullname' => $row->coursefullname,
+                'timeend' => (int) $row->timeend,
+            ];
+        }
+        $result->count = $count;
+        $result->detailstruncated = $count > count($result->details);
+
+        return $result;
+    }
+
+    /**
+     * Finds enabled self-enrolment methods with no enrolment key, no end
+     * date, or both - either weakness alone leaves a course open to
+     * uncontrolled self-enrolment, so this flags on either one (an OR, not
+     * an AND); the per-row 'nokey'/'noenddate' flags in the details tell the
+     * admin which one(s) actually apply so the ambiguity in SPEC section 11's
+     * one-line backlog note ("without a key/without an end date") doesn't
+     * need resolving up front.
+     *
+     * Field semantics verified against enrol/self/lib.php rather than
+     * assumed: an empty/null password means "no key required"
+     * (can_self_enrol() checks `if ($instance->password)`), and
+     * enrolenddate = 0 means "no end date"
+     * (`if ($instance->enrolenddate != 0 and ...)`) - the same convention
+     * user_enrolments.timeend uses in expired_enrolments() above.
+     *
+     * Counts enrolment *instances*, not courses - a course can have more
+     * than one self-enrolment method, and each is independently a risk.
+     *
+     * @return \stdClass with count (exact, uncapped), details (array of
+     *         stdClass: courseid, coursefullname, nokey, noenddate - capped
+     *         at SELFENROLRISKS_MAXDETAILS rows), detailstruncated (bool),
+     *         and computedat (see db/caches.php, 1 day TTL)
+     */
+    public static function self_enrolment_risks(): \stdClass {
+        return self::from_cache('selfenrolrisks', [self::class, 'compute_self_enrolment_risks']);
+    }
+
+    /**
+     * Computes the self_enrolment_risks() signal.
+     *
+     * @return \stdClass with count, details, and detailstruncated
+     */
+    private static function compute_self_enrolment_risks(): \stdClass {
+        global $DB;
+
+        $fromwhere = "FROM {enrol} e
+                       JOIN {course} c ON c.id = e.courseid
+                      WHERE e.enrol = :selfenrol
+                        AND e.status = :enabled
+                        AND (e.password IS NULL OR e.password = :emptykey OR e.enrolenddate = 0)";
+        $params = ['selfenrol' => 'self', 'enabled' => ENROL_INSTANCE_ENABLED, 'emptykey' => ''];
+
+        $count = $DB->count_records_sql("SELECT COUNT(*) {$fromwhere}", $params);
+
+        $instances = $DB->get_records_sql(
+            "SELECT e.id, c.id AS courseid, c.fullname AS coursefullname, e.password, e.enrolenddate
+               {$fromwhere}
+           ORDER BY c.fullname",
+            $params,
+            0,
+            self::SELFENROLRISKS_MAXDETAILS
+        );
+
+        $result = new \stdClass();
+        $result->details = [];
+        foreach ($instances as $instance) {
+            $result->details[] = (object) [
+                'courseid' => $instance->courseid,
+                'coursefullname' => $instance->coursefullname,
+                'nokey' => empty($instance->password),
+                'noenddate' => (int) $instance->enrolenddate === 0,
             ];
         }
         $result->count = $count;

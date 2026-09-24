@@ -44,23 +44,32 @@ final class health_signals_test extends \advanced_testcase {
 
     /**
      * Dispatching the hook (the same way classes/output/dashboard_page.php
-     * will from step 17 onwards) picks up this plugin's own db/hooks.php
-     * registration and returns exactly the four SPEC section 4 signals,
-     * each correctly identified by component+key.
+     * does) picks up this plugin's own db/hooks.php registration and returns
+     * exactly its built-in signals - the four from SPEC section 4 plus the
+     * ones since added from the section 11 backlog - each correctly
+     * identified by component+key.
      *
      * @covers \local_admincockpit\hook\health_signals::add_signal
      * @return void
      */
-    public function test_dispatch_returns_four_builtin_signals(): void {
+    public function test_dispatch_returns_builtin_signals(): void {
         $hook = new health_signals();
         \core\hook\manager::get_instance()->dispatch($hook);
 
         $signals = $hook->get_signals();
-        $this->assertCount(5, $signals);
+        $this->assertCount(7, $signals);
 
         $keys = array_map(static fn (health_signal $signal) => $signal->key, $signals);
         $this->assertEqualsCanonicalizing(
-            ['duplicateemails', 'courseswithoutenddate', 'unpublishedcourses', 'security', 'cron'],
+            [
+                'duplicateemails',
+                'courseswithoutenddate',
+                'unpublishedcourses',
+                'expiredenrolments',
+                'selfenrolrisks',
+                'security',
+                'cron',
+            ],
             $keys
         );
 

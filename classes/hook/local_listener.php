@@ -38,7 +38,9 @@ use local_admincockpit\health_signal;
 use local_admincockpit\metrics\health_signals as health_signal_metrics;
 
 /**
- * Wraps the four SPEC section 4 signals into health_signal DTOs.
+ * Wraps this plugin's own built-in signals into health_signal DTOs: the four
+ * from SPEC section 4, plus the ones added later from the section 11 backlog
+ * (unpublished courses, expired enrolments, self-enrolment risks).
  */
 final class local_listener {
     /**
@@ -51,6 +53,8 @@ final class local_listener {
         $hook->add_signal(self::duplicate_emails_signal());
         $hook->add_signal(self::courses_without_enddate_signal());
         $hook->add_signal(self::unpublished_courses_signal());
+        $hook->add_signal(self::expired_enrolments_signal());
+        $hook->add_signal(self::self_enrolment_risks_signal());
         $hook->add_signal(self::security_overview_signal());
         $hook->add_signal(self::cron_status_signal());
     }
@@ -110,6 +114,44 @@ final class local_listener {
             value: $unpublished->count,
             severity: $unpublished->count > 0 ? 'warning' : 'ok',
             url: '/local/admincockpit/unpublishedcourses.php',
+        );
+    }
+
+    /**
+     * Active enrolments whose end date has already passed (SPEC section 11
+     * backlog, implemented 2026-09-24).
+     *
+     * @return health_signal
+     */
+    private static function expired_enrolments_signal(): health_signal {
+        $expired = health_signal_metrics::expired_enrolments();
+
+        return new health_signal(
+            component: 'local_admincockpit',
+            key: 'expiredenrolments',
+            label: get_string('expiredenrolments', 'local_admincockpit'),
+            value: $expired->count,
+            severity: $expired->count > 0 ? 'warning' : 'ok',
+            url: '/local/admincockpit/expiredenrolments.php',
+        );
+    }
+
+    /**
+     * Self-enrolment methods with no key and/or no end date (SPEC section 11
+     * backlog, implemented 2026-09-24).
+     *
+     * @return health_signal
+     */
+    private static function self_enrolment_risks_signal(): health_signal {
+        $risks = health_signal_metrics::self_enrolment_risks();
+
+        return new health_signal(
+            component: 'local_admincockpit',
+            key: 'selfenrolrisks',
+            label: get_string('selfenrolrisks', 'local_admincockpit'),
+            value: $risks->count,
+            severity: $risks->count > 0 ? 'warning' : 'ok',
+            url: '/local/admincockpit/selfenrolrisks.php',
         );
     }
 

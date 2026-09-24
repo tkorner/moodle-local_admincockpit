@@ -26,6 +26,7 @@ Getting a clear picture of a Moodle site's health today requires navigating thro
   - **Cron Execution Status**: Detects stalled or delayed task execution using core `lastcronstart`.
   - **Security Overview**: Directly surfaces `report_security` check results via core `\core\check\manager`.
   - **Data Hygiene Alerts**: Identifies duplicate user emails and courses missing end dates or visibility.
+  - **Enrolment Hygiene**: Flags still-active enrolments whose end date has passed, and self-enrolment methods left open without an enrolment key or an end date.
 - 🏢 **Organizational Grouping ("Groupings / Schools")**: Automatically matches system-wide **Cohorts** with top-level **Course Categories** using `idnumber`.
 - 🔗 **Grouped Admin Shortcuts**: Quick access to high-frequency administrative tools (restore course, bulk user actions, course creation).
 - 🧩 **Extensible via Hooks**: Third-party plugins can inject custom health signals into the dashboard using Moodle's native Hook API.
