@@ -25,12 +25,10 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_admincockpit';
-$plugin->version   = 2026092402;   // YYYYMMDDXX.
-$plugin->requires  = 2025100600;   // Moodle 5.1.0 branching version (MOODLE_501_STABLE) - supports 5.1 and 5.2.
-// 503 added after verifying against Moodle 5.3dev/beta (no MOODLE_503_STABLE branch cut yet,
-// core still MATURITY_BETA as of this build) in a throwaway docker-compose instance: plugin
-// installs cleanly, dashboard/settings pages render without errors or deprecation notices even
-// under full developer debug, and the full PHPUnit suite passes. Re-verify once 5.3 goes stable.
+$plugin->version   = 2026101100;   // YYYYMMDDXX.
+$plugin->requires  = 2025100600;   // Moodle 5.1.0 branching version (MOODLE_501_STABLE) - supports 5.1 to 5.3.
+// 503 is covered by CI (MOODLE_503_STABLE) and was re-verified by hand against the 5.3 stable
+// release (v5.3.0, 2026100500) after first being declared against the 5.3 beta.
 $plugin->supported = [501, 503];   // Range (inclusive), not a list - see lib/upgrade.txt's $plugin->supported example.
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '2.5.0';
+$plugin->release   = '2.5.1';

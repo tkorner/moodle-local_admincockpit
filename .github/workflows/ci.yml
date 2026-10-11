@@ -7,8 +7,11 @@ jobs:
     runs-on: ubuntu-22.04
 
     services:
+      # Per-branch DB floors: 5.3 requires MariaDB >= 11.4.0 / PostgreSQL >= 17, while 5.1/5.2
+      # only need 10.11.0 / 16 (admin/environment.xml). Only the 5.3 entries override the
+      # defaults, so the older branches keep being tested against what their sites run.
       mariadb:
-        image: mariadb:10
+        image: mariadb:${{ matrix.mariadb || '10.11' }}
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -16,9 +19,11 @@ jobs:
           MYSQL_COLLATION_SERVER: "utf8mb4_unicode_ci"
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+        # MariaDB 11 dropped the mysql* compatibility binaries, so `mysqladmin ping` would leave the
+        # container unhealthy and kill every job (pgsql ones too, services start for all of them).
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval 10s --health-timeout 5s --health-retries 3
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres || '16' }}
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -30,8 +35,12 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.3', '8.4']
-        moodle-branch: ['MOODLE_501_STABLE', 'MOODLE_502_STABLE']
+        moodle-branch: ['MOODLE_501_STABLE', 'MOODLE_502_STABLE', 'MOODLE_503_STABLE']
         db: ['mariadb', 'pgsql']
+        include:
+          - moodle-branch: 'MOODLE_503_STABLE'
+            mariadb: '11.4'
+            postgres: '17'
 
     steps:
       - name: Check out repository code
