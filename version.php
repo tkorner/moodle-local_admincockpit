@@ -25,10 +25,10 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_admincockpit';
-$plugin->version   = 2026101100;   // YYYYMMDDXX.
-$plugin->requires  = 2025100600;   // Moodle 5.1.0 branching version (MOODLE_501_STABLE) - supports 5.1 to 5.3.
-// 503 is covered by CI (MOODLE_503_STABLE) and was re-verified by hand against the 5.3 stable
-// release (v5.3.0, 2026100500) after first being declared against the 5.3 beta.
-$plugin->supported = [501, 503];   // Range (inclusive), not a list - see lib/upgrade.txt's $plugin->supported example.
+$plugin->version   = 2026102200;   // YYYYMMDDXX.
+$plugin->requires  = 2026042000;   // Moodle 5.2.0 branching version (MOODLE_502_STABLE) - supports 5.2 to 5.3.
+// 5.1 support dropped 2026-10-22: no longer developed or tested against. 503 is covered by CI
+// (MOODLE_503_STABLE) and was verified by hand against the 5.3 stable release (v5.3.0, 2026100500).
+$plugin->supported = [502, 503];   // Range (inclusive), not a list - see lib/upgrade.txt's $plugin->supported example.
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '2.5.1';
+$plugin->release   = '2.6.0';
