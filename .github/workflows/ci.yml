@@ -120,6 +120,13 @@ jobs:
         id: behat
         if: ${{ !cancelled() }}
         run: moodle-plugin-ci behat --profile chrome --scss-deprecations
+        env:
+          # The dashboard evaluates core's security checks, and core\check\environment\publicpaths
+          # sends HTTP requests to $CFG->wwwroot itself. moodle-plugin-ci serves Behat with
+          # `php -S`, which has a single worker by default, so the page waited on its own
+          # requests until max_execution_time. Core's security report does the same requests;
+          # a real web server with several workers is not affected.
+          PHP_CLI_SERVER_WORKERS: 4
 
       - name: Upload Behat Faildump
         if: ${{ failure() && steps.behat.outcome == 'failure' }}
