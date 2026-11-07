@@ -1,6 +1,13 @@
 name: Moodle Plugin CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  # Weekly run against the current Moodle branch heads, so upstream changes that break the
+  # plugin show up between releases instead of on the next release commit.
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
 
 jobs:
   test:

@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keeps the actions and reusable workflows in .github/workflows/ current. Updates arrive
+  # as one grouped PR per week, so CI checks them together before anything is merged.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
