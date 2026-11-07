@@ -46,6 +46,7 @@
         "lastcomputedtext": "Stand: 11 July 2026, 20:00, updates daily.",
         "sesskey": "abcdef1234",
         "cansitewidepurge": true,
+        "debugtoggle": {"ison": false, "forced": false, "setvalue": 1},
         "healthsignals": [
             {
                 "label": "Duplicate emails",
@@ -104,6 +105,22 @@
                 </button>
             </form>
             {{/cansitewidepurge}}
+            {{#debugtoggle}}
+            {{#forced}}
+            <span>{{#str}} debugtoggle_forced, local_admincockpit {{/str}}</span>
+            {{/forced}}
+            {{^forced}}
+            <form method="post" action="{{dashboardurl}}" class="m-0">
+                <input type="hidden" name="sesskey" value="{{sesskey}}">
+                <input type="hidden" name="setdebug" value="{{setvalue}}">
+                <input type="hidden" name="timerangedays" value="{{timerangedays}}">
+                <button type="submit" class="btn btn-link btn-sm p-0{{#ison}} text-danger{{/ison}}">
+                    {{#ison}}{{#str}} debugtoggle_off, local_admincockpit {{/str}}{{/ison}}
+                    {{^ison}}{{#str}} debugtoggle_on, local_admincockpit {{/str}}{{/ison}}
+                </button>
+            </form>
+            {{/forced}}
+            {{/debugtoggle}}
         </div>
     </div>
 

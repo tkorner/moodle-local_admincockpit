@@ -40,3 +40,5 @@ Feature: Open the Admin Cockpit dashboard
     Then I should see "Global user metrics"
     And I should see "Refresh now"
     And I should not see "Purge ALL site caches"
+    And I should not see "Turn on developer debugging"
+    And I should not see "Debugging is set in config.php"

@@ -30,6 +30,7 @@ Getting a clear picture of a Moodle site's health today requires navigating thro
 - 🏢 **Organizational Grouping ("Groupings / Schools")**: Automatically matches system-wide **Cohorts** with top-level **Course Categories** using `idnumber`.
 - 🔗 **Grouped Admin Shortcuts**: Quick access to high-frequency administrative tools (restore course, bulk user actions, course creation).
 - 🎭 **One-Click Impersonation**: Search for a user and switch into their session straight from the dashboard, using core's own `loginas_helper` authorisation rules plus a stricter guard that never allows a site administrator as the target.
+- 🧹 **Cache & Debugging Controls**: Refresh the dashboard's own cached numbers, purge all site caches, or switch developer debugging on and off (`debug` + `debugdisplay`) straight from the dashboard. The site-wide actions require `moodle/site:config` and a valid sesskey, and every debugging change is recorded in the config change log. If `config.php` fixes the debugging settings, the dashboard shows that instead of a switch.
 - 🧩 **Extensible via Hooks**: Third-party plugins can inject custom health signals into the dashboard using Moodle's native Hook API.
 - ⚡ **Zero Database Overhead**: Computes metrics dynamically at request time without maintaining custom database tables.
 
@@ -107,13 +108,13 @@ class hook_listener {
 
 ## 🧪 Testing & Quality Assurance
 
-- **PHPUnit Tests**:
+- **PHPUnit Tests** (run from the Moodle root):
   ```bash
-  vendor/bin/phpunit local_admincockpit/tests/metrics_test.php
+  vendor/bin/phpunit --testsuite local_admincockpit_testsuite
   ```
-- **Behat Acceptance Tests**:
+- **Behat Acceptance Tests** (run from the Moodle root):
   ```bash
-  vendor/bin/behat --config /path/to/behat.yml local_admincockpit/tests/behat/cockpit.feature
+  vendor/bin/behat --config /path/to/behatdata/behatrun/behat/behat.yml --tags=@local_admincockpit
   ```
 
 ---

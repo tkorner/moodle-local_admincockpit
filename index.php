@@ -73,6 +73,33 @@ if (optional_param('purgeallcaches', 0, PARAM_BOOL)) {
     );
 }
 
+// Developer debugging switch (SPEC section 5): same protection as the full cache purge above,
+// since it changes site configuration for every user. -1 means "no switch requested"; only 0
+// and 1 are acted on.
+$setdebug = optional_param('setdebug', -1, PARAM_INT);
+if ($setdebug === 0 || $setdebug === 1) {
+    require_sesskey();
+    require_capability('moodle/site:config', \core\context\system::instance());
+    $redirecturl = new \core\url('/local/admincockpit/index.php', ['timerangedays' => $timerangedays]);
+
+    if (\local_admincockpit\debug_toggle::is_forced()) {
+        redirect(
+            $redirecturl,
+            get_string('debugtoggle_forcederror', 'local_admincockpit'),
+            null,
+            \core\output\notification::NOTIFY_ERROR
+        );
+    }
+
+    \local_admincockpit\debug_toggle::set($setdebug === 1);
+    redirect(
+        $redirecturl,
+        get_string($setdebug === 1 ? 'debugtoggle_turnedon' : 'debugtoggle_turnedoff', 'local_admincockpit'),
+        null,
+        $setdebug === 1 ? \core\output\notification::NOTIFY_WARNING : \core\output\notification::NOTIFY_SUCCESS
+    );
+}
+
 // One-click impersonate (SPEC section 5). Handled before any output, since
 // \core\session\manager::loginas() swaps the session out from under us.
 //

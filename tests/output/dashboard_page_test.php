@@ -182,6 +182,39 @@ final class dashboard_page_test extends \advanced_testcase {
     }
 
     /**
+     * The developer-debugging switch follows the same moodle/site:config
+     * gate as the site-wide purge, and offers the opposite of the current
+     * state.
+     *
+     * @covers \local_admincockpit\output\dashboard_page::export_for_template
+     * @return void
+     */
+    public function test_export_for_template_debug_toggle(): void {
+        global $CFG;
+
+        $this->resetAfterTest(true);
+        $originalconfigphpsettings = $CFG->config_php_settings;
+        unset($CFG->config_php_settings['debug'], $CFG->config_php_settings['debugdisplay']);
+
+        $this->setAdminUser();
+        set_config('debug', DEBUG_NONE);
+        set_config('debugdisplay', 0);
+        $context = (new dashboard_page(180))->export_for_template($this->renderer());
+        $this->assertSame(['ison' => false, 'forced' => false, 'setvalue' => 1], $context['debugtoggle']);
+
+        set_config('debug', DEBUG_DEVELOPER);
+        set_config('debugdisplay', 1);
+        $context = (new dashboard_page(180))->export_for_template($this->renderer());
+        $this->assertSame(['ison' => true, 'forced' => false, 'setvalue' => 0], $context['debugtoggle']);
+
+        $this->setUser($this->getDataGenerator()->create_user());
+        $context = (new dashboard_page(180))->export_for_template($this->renderer());
+        $this->assertFalse($context['debugtoggle']);
+
+        $CFG->config_php_settings = $originalconfigphpsettings;
+    }
+
+    /**
      * A group whose only item gets filtered out by capability must not
      * appear as an empty card with a heading and nothing under it.
      *

@@ -825,6 +825,35 @@ PHPUnit test + cli/verify_ script, same as steps 5/6.
 
 ---
 
+## Step 21 – Quick action: developer debugging switch (SPEC section 5) ✅ done
+
+```
+Complete SPEC section 5's "Quick cache purge & debug switch" - the cache
+purge exists since 2.2.0, the debug switch was still missing.
+
+1. classes/debug_toggle.php (page-free, like loginas_guard): is_on()
+   (DEBUG_DEVELOPER and debugdisplay), is_forced() (either setting in
+   $CFG->config_php_settings), set(bool) - DEBUG_DEVELOPER + debugdisplay 1,
+   or DEBUG_NONE + 0, as the SPEC says. Verify in core first how set_config()
+   behaves for a setting fixed in config.php and how config changes get
+   logged; don't assume.
+2. index.php: POST setdebug=0|1, require_sesskey() + moodle/site:config,
+   same as the full purge. Refuse with a notification if forced.
+3. Dashboard: button next to "Purge ALL site caches", only for
+   moodle/site:config; text instead of a button if forced.
+4. PHPUnit (debug_toggle_test, dashboard_page_test), Behat visibility check
+   that does not depend on the runner's config.php, lang en + de.
+```
+
+Verified in core (Moodle 5.2): set_config() leaves $CFG alone when
+config.php fixes the setting, and its $log parameter writes the config_log
+entry report_configlog shows. moodle-plugin-ci's generated config.php fixes
+debug/debugdisplay, so in CI the dashboard shows "set in config.php" - the
+Behat scenario only asserts what a manager must not see. PHPUnit 66/66 in the
+container.
+
+---
+
 ## Notes for the session
 
 - Plugin names, capability names, and table names in this file are suggestions,

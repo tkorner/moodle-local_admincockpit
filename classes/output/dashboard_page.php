@@ -29,6 +29,7 @@
 
 namespace local_admincockpit\output;
 
+use local_admincockpit\debug_toggle;
 use local_admincockpit\health_signal_ordering;
 use local_admincockpit\navitems_parser;
 use local_admincockpit\school_matcher;
@@ -71,6 +72,7 @@ class dashboard_page implements \core\output\renderable, \core\output\templatabl
     public function export_for_template(\core\output\renderer_base $output): array {
         $grouping = $this->grouping_label();
         $navgroups = $this->export_nav_groups();
+        $cansiteconfig = has_capability('moodle/site:config', \core\context\system::instance());
 
         return [
             'introtext' => get_string('dashboardintro', 'local_admincockpit', $grouping),
@@ -84,7 +86,8 @@ class dashboard_page implements \core\output\renderable, \core\output\templatabl
             'settingsurl' => (new \core\url('/admin/settings.php', ['section' => 'local_admincockpit_settings']))->out(false),
             'lastcomputedtext' => $this->export_lastcomputedtext(),
             'sesskey' => sesskey(),
-            'cansitewidepurge' => has_capability('moodle/site:config', \core\context\system::instance()),
+            'cansitewidepurge' => $cansiteconfig,
+            'debugtoggle' => $cansiteconfig ? $this->export_debug_toggle() : false,
             'loginasformhtml' => $this->loginasformhtml,
             'hasloginasform' => $this->loginasformhtml !== '',
             'healthsignals' => $this->export_health_signals($output),
@@ -103,6 +106,24 @@ class dashboard_page implements \core\output\renderable, \core\output\templatabl
      */
     private function grouping_label(): string {
         return (string) get_config('local_admincockpit', 'groupinglabel') ?: school_matcher::DEFAULT_GROUPING_LABEL;
+    }
+
+    /**
+     * Builds the developer-debugging switch (SPEC section 5). Only called
+     * for users with moodle/site:config, the same gate index.php enforces
+     * when the switch is used.
+     *
+     * @return array with ison, forced, and setvalue (the value the button
+     *         submits: 0 to switch off, 1 to switch on)
+     */
+    private function export_debug_toggle(): array {
+        $ison = debug_toggle::is_on();
+
+        return [
+            'ison' => $ison,
+            'forced' => debug_toggle::is_forced(),
+            'setvalue' => $ison ? 0 : 1,
+        ];
     }
 
     /**
