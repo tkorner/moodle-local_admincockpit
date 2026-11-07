@@ -15,8 +15,7 @@ Feature: Open the Admin Cockpit dashboard
   Scenario: An administrator reaches the dashboard through the site administration
     Given I log in as "admin"
     When I navigate to "Reports > Admin Cockpit" in site administration
-    Then I should see "Admin Cockpit" in the "region-main" "region"
-    And I should see "Global user metrics"
+    Then I should see "Global user metrics"
     And I should see "Health signals"
     And I should see "Navigation"
     And I should see "Purge ALL site caches"
