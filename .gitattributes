@@ -1,10 +1,14 @@
 # Development-only artifacts: not needed at runtime, not meant for end users installing this
-# plugin from a release zip / the Moodle Plugin Directory. `git archive` (and GitHub's own
-# "Download ZIP") honour export-ignore; moodle-plugin-ci's packaging step does not currently
-# read this file, so a release script (or manual removal before zipping) is still needed there -
-# see README.md "Tests & CI".
+# plugin from a release zip. Every release channel builds its package with `git archive`, which
+# honours export-ignore: the Moodle Marketplace workflow (.github/workflows/moodle-release.yml),
+# the CAMP registry (camp-tools reads .camp/listing.yml from the commit, not from the archive)
+# and GitHub's own "Download ZIP".
 /CLAUDE.md export-ignore
 /SPEC-admincockpit.md export-ignore
 /claude-code-prompt-admincockpit.md export-ignore
 /*-CODE-REVIEW-*.md export-ignore
 /cli/verify_*.php export-ignore
+/.camp export-ignore
+/.github export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
