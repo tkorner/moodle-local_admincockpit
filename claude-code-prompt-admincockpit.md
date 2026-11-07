@@ -854,6 +854,35 @@ container.
 
 ---
 
+## Step 22 – Health signal: courses without students or teachers (SPEC section 11) ✅ done
+
+```
+Implement the remaining SPEC section 11 backlog signal through the same hook
+listener as the other built-in signals.
+
+- Visible courses where nobody holds a student role OR nobody holds a
+  teacher role through an active enrolment; per-row nostudents/noteachers
+  flags (the backlog note asks to keep "abandoned test course" visible).
+- Roles: don't hardcode shortnames - use core's "Graded roles"
+  ($CFG->gradebookroles) and "Course contacts" ($CFG->coursecontact). Verify
+  their storage format in core first. Empty setting = that half is off.
+- "Active enrolment" as in core's get_enrolled_join($onlyactive) - verify
+  in lib/enrollib.php.
+- Cache like the other signals, with the role ids in the key.
+- Drill-down page linking to the course participants page, PHPUnit,
+  cli/verify_ script output, lang en + de, healthsignals_available list.
+```
+
+Verified in core (Moodle 5.2): both role settings store comma-separated role
+ids (admin_setting_configmulticheckbox); the active-enrolment conditions are
+copied from get_enrolled_join(); Moodle's DML rejects a named placeholder
+used twice in one query (duplicateparaminsql), so the EXISTS conditions are
+built once per use with their own prefix. Local PHPUnit could not run for
+this step (the container's view of a sibling plugin's files was broken while
+another session edited them) - verified in CI instead.
+
+---
+
 ## Notes for the session
 
 - Plugin names, capability names, and table names in this file are suggestions,

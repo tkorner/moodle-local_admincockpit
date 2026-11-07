@@ -404,4 +404,128 @@ final class health_signals_test extends \advanced_testcase {
             'pid' => 1,
         ]);
     }
+
+    /**
+     * Visible courses are flagged for each missing role group, with
+     * per-row flags; a course with both a student and a teacher is not, and
+     * hidden courses are left to unpublished_courses().
+     *
+     * @covers \local_admincockpit\metrics\health_signals::courses_without_participants
+     * @return void
+     */
+    public function test_courses_without_participants_flags_each_missing_group(): void {
+        $this->resetAfterTest(true);
+        $generator = $this->getDataGenerator();
+
+        $complete = $generator->create_course(['fullname' => 'Complete']);
+        $generator->enrol_user($generator->create_user()->id, $complete->id, 'student');
+        $generator->enrol_user($generator->create_user()->id, $complete->id, 'editingteacher');
+
+        $nostudents = $generator->create_course(['fullname' => 'Teacher only']);
+        $generator->enrol_user($generator->create_user()->id, $nostudents->id, 'editingteacher');
+
+        $noteachers = $generator->create_course(['fullname' => 'Student only']);
+        $generator->enrol_user($generator->create_user()->id, $noteachers->id, 'student');
+
+        $empty = $generator->create_course(['fullname' => 'Empty']);
+        $generator->create_course(['fullname' => 'Hidden and empty', 'visible' => 0]);
+
+        $result = health_signals::courses_without_participants();
+
+        $this->assertSame(3, $result->count);
+        $this->assertCount(3, $result->details);
+        $this->assertFalse($result->detailstruncated);
+
+        $bycourse = array_column($result->details, null, 'courseid');
+        $this->assertArrayNotHasKey($complete->id, $bycourse);
+
+        $this->assertTrue($bycourse[$nostudents->id]->nostudents);
+        $this->assertFalse($bycourse[$nostudents->id]->noteachers);
+
+        $this->assertFalse($bycourse[$noteachers->id]->nostudents);
+        $this->assertTrue($bycourse[$noteachers->id]->noteachers);
+
+        $this->assertTrue($bycourse[$empty->id]->nostudents);
+        $this->assertTrue($bycourse[$empty->id]->noteachers);
+    }
+
+    /**
+     * Only active enrolments count: a suspended enrolment, an expired one,
+     * and a suspended account all leave the course without students.
+     *
+     * @covers \local_admincockpit\metrics\health_signals::courses_without_participants
+     * @return void
+     */
+    public function test_courses_without_participants_ignores_inactive_enrolments(): void {
+        $this->resetAfterTest(true);
+        $generator = $this->getDataGenerator();
+
+        $suspendedenrolment = $generator->create_course();
+        $expiredenrolment = $generator->create_course();
+        $suspendedaccount = $generator->create_course();
+        foreach ([$suspendedenrolment, $expiredenrolment, $suspendedaccount] as $course) {
+            $generator->enrol_user($generator->create_user()->id, $course->id, 'editingteacher');
+        }
+
+        $generator->enrol_user(
+            $generator->create_user()->id,
+            $suspendedenrolment->id,
+            'student',
+            'manual',
+            0,
+            0,
+            ENROL_USER_SUSPENDED
+        );
+        $generator->enrol_user(
+            $generator->create_user()->id,
+            $expiredenrolment->id,
+            'student',
+            'manual',
+            time() - WEEKSECS,
+            time() - DAYSECS
+        );
+        $generator->enrol_user($generator->create_user(['suspended' => 1])->id, $suspendedaccount->id, 'student');
+
+        $result = health_signals::courses_without_participants();
+
+        $this->assertSame(3, $result->count);
+        foreach ($result->details as $row) {
+            $this->assertTrue($row->nostudents);
+            $this->assertFalse($row->noteachers);
+        }
+    }
+
+    /**
+     * The roles come from core's "Graded roles" and "Course contacts"
+     * settings; emptying one switches that half of the check off instead of
+     * flagging every course.
+     *
+     * @covers \local_admincockpit\metrics\health_signals::courses_without_participants
+     * @return void
+     */
+    public function test_courses_without_participants_follows_role_settings(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $generator->enrol_user($generator->create_user()->id, $course->id, 'student');
+
+        set_config('coursecontact', '');
+        $result = health_signals::courses_without_participants();
+        $this->assertSame(0, $result->count);
+
+        $teacherroleid = (int) $DB->get_field('role', 'id', ['shortname' => 'teacher']);
+        set_config('coursecontact', (string) $teacherroleid);
+        $generator->enrol_user($generator->create_user()->id, $course->id, 'editingteacher');
+        $result = health_signals::courses_without_participants();
+        $this->assertSame(1, $result->count);
+        $this->assertTrue($result->details[0]->noteachers);
+
+        set_config('coursecontact', '');
+        set_config('gradebookroles', '');
+        $result = health_signals::courses_without_participants();
+        $this->assertSame(0, $result->count);
+    }
 }

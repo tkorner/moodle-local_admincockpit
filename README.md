@@ -27,6 +27,7 @@ Getting a clear picture of a Moodle site's health today requires navigating thro
   - **Security Overview**: Directly surfaces `report_security` check results via core `\core\check\manager`.
   - **Data Hygiene Alerts**: Identifies duplicate user emails and courses missing end dates or visibility.
   - **Enrolment Hygiene**: Flags still-active enrolments whose end date has passed, and self-enrolment methods left open without an enrolment key or an end date.
+  - **Course Staffing**: Flags visible courses with no students or no teachers, using the site's own "Graded roles" and "Course contacts" settings to decide which roles count.
 - 🏢 **Organizational Grouping ("Groupings / Schools")**: Automatically matches system-wide **Cohorts** with top-level **Course Categories** using `idnumber`.
 - 🔗 **Grouped Admin Shortcuts**: Quick access to high-frequency administrative tools (restore course, bulk user actions, course creation).
 - 🎭 **One-Click Impersonation**: Search for a user and switch into their session straight from the dashboard, using core's own `loginas_helper` authorisation rules plus a stricter guard that never allows a site administrator as the target.

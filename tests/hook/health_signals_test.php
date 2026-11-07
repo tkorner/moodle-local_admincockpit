@@ -57,7 +57,7 @@ final class health_signals_test extends \advanced_testcase {
         \core\hook\manager::get_instance()->dispatch($hook);
 
         $signals = $hook->get_signals();
-        $this->assertCount(7, $signals);
+        $this->assertCount(8, $signals);
 
         $keys = array_map(static fn (health_signal $signal) => $signal->key, $signals);
         $this->assertEqualsCanonicalizing(
@@ -67,6 +67,7 @@ final class health_signals_test extends \advanced_testcase {
                 'unpublishedcourses',
                 'expiredenrolments',
                 'selfenrolrisks',
+                'courseswithoutparticipants',
                 'security',
                 'cron',
             ],

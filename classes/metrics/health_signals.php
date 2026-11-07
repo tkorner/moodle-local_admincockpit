@@ -74,6 +74,11 @@ class health_signals {
      */
     private const SELFENROLRISKS_MAXDETAILS = 500;
 
+    /** @var int Hard cap on courses_without_participants()'s drill-down rows, same rationale as
+     *  COURSESWITHOUTENDDATE_MAXDETAILS - count stays exact, only the detail list is capped.
+     */
+    private const COURSESWITHOUTPARTICIPANTS_MAXDETAILS = 500;
+
     /**
      * Finds email addresses shared by more than one non-deleted, locally
      * managed, non-guest user account.
@@ -425,6 +430,186 @@ class health_signals {
         $result->detailstruncated = $count > count($result->details);
 
         return $result;
+    }
+
+    /**
+     * Finds visible courses in which nobody holds a student role, or nobody
+     * holds a teacher role, through an active enrolment (SPEC section 11
+     * backlog). Either gap is reported; the per-row 'nostudents'/
+     * 'noteachers' flags tell the admin which one applies, so an abandoned
+     * test course (both) can be told apart from a course still waiting for
+     * its participants (only students missing).
+     *
+     * Which roles count is not decided here but taken from two existing core
+     * settings, so it follows the site's own role setup instead of
+     * hardcoded shortnames: "Graded roles" ($CFG->gradebookroles, default
+     * student) for students, "Course contacts" ($CFG->coursecontact, default
+     * editingteacher) for teachers - both comma-separated role ids
+     * (admin_setting_pickroles). A setting left empty switches its half of
+     * the check off rather than flagging every course.
+     *
+     * "Active enrolment" uses the same conditions as core's
+     * get_enrolled_join() with $onlyactive (lib/enrollib.php): active user
+     * enrolment in an enabled instance, already started and not yet ended,
+     * plus a non-deleted, non-suspended account. Only role assignments in
+     * the course context itself count, not ones inherited from a category.
+     * Hidden courses are left to unpublished_courses().
+     *
+     * @return \stdClass with count (exact, uncapped), details (array of
+     *         stdClass: courseid, coursefullname, nostudents, noteachers -
+     *         capped at COURSESWITHOUTPARTICIPANTS_MAXDETAILS rows),
+     *         detailstruncated (bool), and computedat (see db/caches.php,
+     *         1 day TTL)
+     */
+    public static function courses_without_participants(): \stdClass {
+        global $CFG;
+
+        $studentroleids = self::role_ids_from_setting((string) ($CFG->gradebookroles ?? ''));
+        $teacherroleids = self::role_ids_from_setting((string) ($CFG->coursecontact ?? ''));
+
+        // The role settings are part of the key, so changing either one takes effect on the next
+        // page load instead of after the 1-day TTL.
+        $cachekey = 'courseswithoutparticipants_' . implode('_', $studentroleids) . '_t_' . implode('_', $teacherroleids);
+
+        return self::from_cache(
+            $cachekey,
+            fn () => self::compute_courses_without_participants($studentroleids, $teacherroleids)
+        );
+    }
+
+    /**
+     * Computes the courses_without_participants() signal.
+     *
+     * @param int[] $studentroleids
+     * @param int[] $teacherroleids
+     * @return \stdClass with count, details, and detailstruncated
+     */
+    private static function compute_courses_without_participants(array $studentroleids, array $teacherroleids): \stdClass {
+        global $DB;
+
+        $result = new \stdClass();
+        $result->count = 0;
+        $result->details = [];
+        $result->detailstruncated = false;
+
+        if (empty($studentroleids) && empty($teacherroleids)) {
+            return $result;
+        }
+
+        // Moodle's DML rejects a named placeholder used twice in one query (duplicateparaminsql), so
+        // every use of a condition below is built separately with its own parameter prefix.
+        $where = self::participant_conditions($studentroleids, $teacherroleids, 'w');
+        $fromwhere = "FROM {course} c
+                       JOIN {course_categories} cc ON cc.id = c.category
+                       JOIN {context} ctx ON ctx.instanceid = c.id AND ctx.contextlevel = :courselevel
+                      WHERE c.visible = 1
+                        AND (NOT ({$where->hasstudents}) OR NOT ({$where->hasteachers}))";
+        $params = ['courselevel' => CONTEXT_COURSE] + $where->params;
+
+        $result->count = $DB->count_records_sql("SELECT COUNT(*) {$fromwhere}", $params);
+
+        $select = self::participant_conditions($studentroleids, $teacherroleids, 's');
+        $courses = $DB->get_records_sql(
+            "SELECT c.id, c.fullname,
+                    CASE WHEN {$select->hasstudents} THEN 0 ELSE 1 END AS nostudents,
+                    CASE WHEN {$select->hasteachers} THEN 0 ELSE 1 END AS noteachers
+               {$fromwhere}
+           ORDER BY c.fullname",
+            $params + $select->params,
+            0,
+            self::COURSESWITHOUTPARTICIPANTS_MAXDETAILS
+        );
+
+        foreach ($courses as $course) {
+            $result->details[] = (object) [
+                'courseid' => $course->id,
+                'coursefullname' => $course->fullname,
+                'nostudents' => (bool) $course->nostudents,
+                'noteachers' => (bool) $course->noteachers,
+            ];
+        }
+        $result->detailstruncated = $result->count > count($result->details);
+
+        return $result;
+    }
+
+    /**
+     * Builds the "has students" and "has teachers" conditions for one use in
+     * a query. A role group with no roles configured is always satisfied, so
+     * that half of the check never flags a course.
+     *
+     * @param int[] $studentroleids
+     * @param int[] $teacherroleids
+     * @param string $prefix parameter name prefix, unique per use in a query
+     * @return \stdClass with hasstudents (SQL), hasteachers (SQL), params
+     */
+    private static function participant_conditions(array $studentroleids, array $teacherroleids, string $prefix): \stdClass {
+        $conditions = (object) ['hasstudents' => '1 = 1', 'hasteachers' => '1 = 1', 'params' => []];
+
+        if (!empty($studentroleids)) {
+            [$conditions->hasstudents, $params] = self::active_role_holder_exists($studentroleids, $prefix . 'st');
+            $conditions->params += $params;
+        }
+        if (!empty($teacherroleids)) {
+            [$conditions->hasteachers, $params] = self::active_role_holder_exists($teacherroleids, $prefix . 'te');
+            $conditions->params += $params;
+        }
+
+        return $conditions;
+    }
+
+    /**
+     * Builds an EXISTS condition "someone in the course context (ctx, of
+     * course c) holds one of these roles through an active enrolment".
+     *
+     * All named parameters start with $prefix, so separate calls can be
+     * combined in one query.
+     *
+     * @param int[] $roleids non-empty
+     * @param string $prefix parameter name prefix, unique per call
+     * @return array [string $sql, array $params]
+     */
+    private static function active_role_holder_exists(array $roleids, string $prefix): array {
+        global $DB;
+
+        [$insql, $params] = $DB->get_in_or_equal($roleids, SQL_PARAMS_NAMED, $prefix . 'role');
+        $params += [
+            $prefix . 'active' => ENROL_USER_ACTIVE,
+            $prefix . 'enabled' => ENROL_INSTANCE_ENABLED,
+            $prefix . 'now1' => time(),
+            $prefix . 'now2' => time(),
+        ];
+
+        $sql = "EXISTS (
+                    SELECT 1
+                      FROM {role_assignments} ra
+                      JOIN {user_enrolments} ue ON ue.userid = ra.userid
+                      JOIN {enrol} e ON e.id = ue.enrolid AND e.courseid = c.id
+                      JOIN {user} u ON u.id = ra.userid
+                     WHERE ra.contextid = ctx.id
+                       AND ra.roleid {$insql}
+                       AND ue.status = :{$prefix}active
+                       AND e.status = :{$prefix}enabled
+                       AND ue.timestart < :{$prefix}now1
+                       AND (ue.timeend = 0 OR ue.timeend > :{$prefix}now2)
+                       AND u.deleted = 0
+                       AND u.suspended = 0
+                )";
+
+        return [$sql, $params];
+    }
+
+    /**
+     * Parses a comma-separated role id list as stored by
+     * admin_setting_pickroles, sorted so equal settings give equal cache keys.
+     *
+     * @param string $value
+     * @return int[]
+     */
+    private static function role_ids_from_setting(string $value): array {
+        $ids = array_filter(array_map('intval', explode(',', $value)));
+        sort($ids);
+        return array_values(array_unique($ids));
     }
 
     /**

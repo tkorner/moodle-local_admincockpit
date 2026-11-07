@@ -46,6 +46,10 @@ $unpublishedcoursedays = (int) (get_config('local_admincockpit', 'unpublishedcou
 var_export(health_signals::unpublished_courses($unpublishedcoursedays));
 echo PHP_EOL;
 
+echo '== courses_without_participants ==' . PHP_EOL;
+var_export(health_signals::courses_without_participants());
+echo PHP_EOL;
+
 echo '== security_overview_summary ==' . PHP_EOL;
 var_export(health_signals::security_overview_summary());
 echo PHP_EOL;

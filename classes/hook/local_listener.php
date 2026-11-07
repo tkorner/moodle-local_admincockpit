@@ -55,6 +55,7 @@ final class local_listener {
         $hook->add_signal(self::unpublished_courses_signal());
         $hook->add_signal(self::expired_enrolments_signal());
         $hook->add_signal(self::self_enrolment_risks_signal());
+        $hook->add_signal(self::courses_without_participants_signal());
         $hook->add_signal(self::security_overview_signal());
         $hook->add_signal(self::cron_status_signal());
     }
@@ -152,6 +153,25 @@ final class local_listener {
             value: $risks->count,
             severity: $risks->count > 0 ? 'warning' : 'ok',
             url: '/local/admincockpit/selfenrolrisks.php',
+        );
+    }
+
+    /**
+     * Visible courses without students or without teachers (SPEC section 11
+     * backlog, implemented 2026-11-07).
+     *
+     * @return health_signal
+     */
+    private static function courses_without_participants_signal(): health_signal {
+        $courses = health_signal_metrics::courses_without_participants();
+
+        return new health_signal(
+            component: 'local_admincockpit',
+            key: 'courseswithoutparticipants',
+            label: get_string('courseswithoutparticipants', 'local_admincockpit'),
+            value: $courses->count,
+            severity: $courses->count > 0 ? 'warning' : 'ok',
+            url: '/local/admincockpit/courseswithoutparticipants.php',
         );
     }
 
